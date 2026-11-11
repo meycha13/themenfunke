@@ -30,7 +30,7 @@ const paths={
   tree:'M12 3v7m-7 4v-4h14v4M2 15h6v6H2Zm7-12h6v5H9Zm7 12h6v6h-6Z', cards:'m6 6 13-3 4 16-13 3L6 6ZM3 5 1 18l6 1',
   more:'M5 12h.01M12 12h.01M19 12h.01', send:'m22 2-7 20-4-9L2 9l20-7ZM11 13 22 2',
   shield:'m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-4 10 3 3 5-6', download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',
-  infinity:'M12 12C5-1-3 12 3 16c5 4 9-4 9-4s4-8 9-4c6 4-2 17-9 4Z', pause:'M8 4v16M16 4v16', trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7', edit:'m4 16 12-12 4 4L8 20l-5 1 1-5Zm10-10 4 4'
+  infinity:'M12 12C5-1-3 12 3 16c5 4 9-4 9-4s4-8 9-4c6 4-2 17-9 4Z', pause:'M8 4v16M16 4v16', trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7', edit:'m4 16 12-12 4 4L8 20l-5 1 1-5Zm10-10 4 4', info:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 11v6m0-10h.01'
 };
 const icon=(name,cls='')=>`<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||paths.spark}"/></svg>`;
 const avatar=(p,size='')=>`<span class="avatar ${esc(p.color||'sage')} ${size}">${icon(p.avatar||'sprout')}</span>`;
@@ -56,6 +56,11 @@ function toast(text) {
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>element.classList.remove('visible'),4200);
 }
 function go(next) { tab=next; currentChat=null; topicFilter='all'; location.hash=next; render(); window.scrollTo({top:0,behavior:'instant'}); }
+function visibleMatches() {
+  const matches=findMatches(state,people);
+  if(topicFilter==='all')return matches;
+  return matches.map(match=>({...match,pairs:match.pairs.filter(pair=>pair.mine.topicId===topicFilter)})).filter(match=>match.pairs.length);
+}
 const navItems=[['discover','compass','Entdecken'],['topics','grid','Themen'],['messages','chat','Nachrichten'],['profile','user','Profil']];
 function render() {
   const incoming=state.requests.filter(r=>r.direction==='in').length;
@@ -70,8 +75,7 @@ function render() {
 }
 function discoverView() {
   const interests=state.interests.filter(i=>active(i));
-  const allMatches=findMatches(state,people);
-  const matches=topicFilter==='all'?allMatches:allMatches.filter(m=>m.pairs.some(p=>p.mine.topicId===topicFilter));
+  const matches=visibleMatches();
   return `<section class="hero"><div class="hero-copy"><span class="eyebrow">WENIGER SMALLTALK. MEHR GEMEINSAMKEITEN.</span><h1>Dein Thema.<br>Ein neuer <em>Funke.</em></h1><p>Finde Menschen, die darüber sprechen möchten,<br class="desktop-only"> was dich gerade beschäftigt. Ganz ohne Profilshow.</p>${button(`Themen entdecken ${icon('arrow')}`,'catalog','btn primary')}</div><div class="hero-art" aria-hidden="true"><div class="art-orbit"></div><div class="art-tile tile-one">${icon('leaf')}</div><div class="art-tile tile-two">${icon('orbit')}</div><div class="art-bubble">${icon('chat')}<span>Ein Thema verbindet.</span></div><span class="art-star">✳</span><span class="art-dot"></span></div></section>
     <div class="discover-grid"><section class="people-section"><div class="section-heading"><div><span class="eyebrow">GEMEINSAMER GESPRÄCHSSTOFF</span><h2>Vielleicht passt es ja.</h2></div><span class="subtle-count">${matches.length} ${matches.length===1?'Vorschlag':'Vorschläge'}</span></div>
     ${interests.length?`<div class="filter-row" aria-label="Nach Thema filtern">${button('Alle Themen','filter',`chip ${topicFilter==='all'?'active':''}`,'data-id="all"')}${interests.map(i=>button(esc(label(i.topicId)),'filter',`chip ${topicFilter===i.topicId?'active':''}`,`data-id="${i.topicId}"`)).join('')}</div>`:''}
@@ -121,7 +125,7 @@ function openModal(next) { modal=next; renderModal(); }
 function closeModal() { modal=null; renderModal(); }
 function renderModal() {
   if(!modal) { modalRoot.innerHTML=''; return; }
-  const content=modal.type==='welcome'?welcomeModal():modal.type==='catalog'?catalogModal():modal.type==='editor'?editorModal():modal.type==='person'?personModal():modal.type==='menu'?menuModal():modal.type==='report'?reportModal():modal.type==='blocked'?blockedModal():modal.type==='confirm'?confirmModal():aboutModal();
+  const content=modal.type==='welcome'?welcomeModal():modal.type==='catalog'?catalogModal():modal.type==='editor'?editorModal():modal.type==='person'?personModal():modal.type==='menu'?menuModal():modal.type==='report'?reportModal():modal.type==='blocked'?blockedModal():modal.type==='confirm'?confirmModal():modal.type==='install'?installModal():aboutModal();
   modalRoot.innerHTML=`<dialog class="modal ${modal.type==='catalog'?'catalog-modal':''}" aria-labelledby="modal-title"><div class="modal-heading">${modal.type==='catalog'&&modal.parent?button(icon('back'),'catalog-back','icon-btn','aria-label="Übergeordnetes Thema"'):'<span></span>'}${button(icon('close'),'close-modal','icon-btn','aria-label="Schließen"')}</div>${content}</dialog>`;
   const dialog=modalRoot.querySelector('dialog'); dialog.showModal();
   dialog.addEventListener('cancel',()=>{modal=null;});
@@ -158,7 +162,7 @@ function editorModal() {
   return `<span class="topic-symbol ${world.color}">${icon(world.icon)}</span><p class="breadcrumb">${esc(topicPath(modal.topicId))}</p><h2 id="modal-title">${esc(label(modal.topicId))}</h2><form id="interest-form" data-id="${modal.topicId}"><fieldset><legend>Wie möchtest du darüber sprechen? <span class="optional">optional</span></legend><div class="option-grid">${Object.entries(roles).map(([id,title])=>`<label class="radio-option"><input type="radio" name="role" value="${id}" ${(i?.role||'open')===id?'checked':''}><span>${esc(title)}</span></label>`).join('')}</div></fieldset><fieldset><legend>Wie lange soll dein Thema aktiv bleiben?</legend><div class="duration-options">${Object.entries(durations).map(([id,title])=>`<label class="radio-option duration-option"><input type="radio" name="mode" value="${id}" ${mode===id?'checked':''} required><span><strong>${title}</strong>${id==='day'?'<small>Heute besonders aktuell</small>':id==='always'?'<small>Darüber könnte ich immer sprechen</small>':''}</span></label>`).join('')}</div>${i?.always?`<label class="checkbox-label"><input type="checkbox" name="keepAlways" checked> Zusätzlich dauerhaft aktiv lassen</label>`:''}</fieldset><label for="interest-text">Was interessiert dich daran gerade besonders? <span class="optional">optional</span></label><textarea id="interest-text" name="text" maxlength="300" rows="3" placeholder="Zum Beispiel: Mich interessieren vor allem Kraken.">${esc(i?.text||'')}</textarea><p class="field-hint">Dieser Text wird anderen bei passenden Vorschlägen angezeigt. Maximal 300 Zeichen.</p><button type="submit" class="btn primary full">${i?'Gesprächswunsch speichern':'Thema aktivieren'} ${icon('arrow')}</button></form>`;
 }
 function personModal() {
-  const match=findMatches(state,people).find(m=>m.person.id===modal.personId);
+  const match=visibleMatches().find(m=>m.person.id===modal.personId);
   if(!match) return `<h2 id="modal-title">Dieser Vorschlag hat sich geändert.</h2><p>Die Themenverbindung ist nicht mehr aktiv oder es besteht bereits ein Kontakt.</p>${button('Zurück zu Entdecken','close-modal','btn primary')}`;
   const {person,pairs}=match,pair=pairs[0];
   return `<span class="eyebrow">${pair.kind==='exact'?'GEMEINSAMER GESPRÄCHSSTOFF':'VERWANDTES INTERESSE'}</span><h2 id="modal-title">${esc(label(pair.mine.topicId))}</h2><div class="person-heading detail-person">${avatar(person)}<div><h3>${esc(person.name)}</h3><span>Beispielperson</span></div></div>${pair.kind==='related'?`<div class="notice">Du hast „${esc(label(pair.mine.topicId))}“ gewählt, ${esc(person.name)} „${esc(label(pair.theirs.topicId))}“. Die Themen liegen im selben Zweig.</div>`:''}<div class="compare-card"><strong>${esc(person.name)} möchte ${esc(roles[pair.theirs.role].toLocaleLowerCase('de'))}.</strong><p>„${esc(pair.theirs.text)}“</p><small>${esc(status(pair.theirs))}</small></div><div class="compare-card mine"><strong>Dein Gesprächswunsch</strong><span class="role-label">${esc(roles[pair.mine.role])}</span><p>${pair.mine.text?`„${esc(pair.mine.text)}“`:'Du hast keinen Freitext ergänzt.'}</p><small>${esc(status(pair.mine))}</small></div><p class="detail-bio">${esc(person.bio)}</p><p class="field-hint">Mit der Anfrage werden dein Pseudonym, Avatar und der oben gezeigte Gesprächswunsch geteilt. Schreiben könnt ihr nach Annahme. In dieser Demo bleibt alles auf deinem Gerät.</p>${button(`Kontakt anfragen ${icon('arrow')}`,'send-request','btn primary full',`data-id="${person.id}"`)}<div class="detail-secondary">${button('Weiter','skip','btn text',`data-id="${person.id}"`)}${button('Blockieren oder melden','person-menu','btn text',`data-id="${person.id}"`)}</div>`;
@@ -184,6 +188,9 @@ function confirmModal() {
 function aboutModal() {
   return `<span class="eyebrow">EIN ERSTER FUNKE</span><h2 id="modal-title">Dein Prototyp zum Ausprobieren.</h2><p>Themenfunke bringt Menschen über gemeinsame Gesprächsthemen zusammen. In dieser Version kannst du den gesamten Ablauf mit Beispielpersonen testen.</p><ul class="about-list"><li>Alle Personen und Antworten sind fiktiv.</li><li>Anfragen, Chats und Meldungen bleiben in deinem Browser.</li><li>Es gibt keine echten Push-Nachrichten, Konten oder Kontakte.</li><li>Nach dem ersten Laden kannst du die App offline öffnen.</li><li>Deine Eingaben werden nicht zwischen Geräten synchronisiert.</li></ul><p>Gehostet wird die App über GitHub Pages. Beim Laden gelten zusätzlich die Datenschutzbedingungen des Hosting-Anbieters.</p>${button('Verstanden','close-modal','btn primary full')}`;
 }
+function installModal() {
+  return `<span class="eyebrow">EIN PLATZ AUF DEINEM STARTBILDSCHIRM</span><h2 id="modal-title">Themenfunke als App.</h2><div class="compare-card"><strong>iPhone oder iPad</strong><p>Öffne den App-Link in Safari. Tippe auf „Teilen“ und anschließend auf „Zum Home-Bildschirm“. Bestätige mit „Hinzufügen“.</p></div><div class="compare-card"><strong>Android</strong><p>Öffne den App-Link in Chrome. Im Browsermenü findest du „App installieren“ oder „Zum Startbildschirm hinzufügen“.</p></div><p>Nach dem ersten vollständigen Laden funktioniert der Demo-Prototyp auch offline. Deine Eingaben bleiben auf diesem Gerät.</p>${button('Verstanden','close-modal','btn primary full')}`;
+}
 
 async function action(element) {
   const a=element.dataset.action,id=element.dataset.id;
@@ -205,7 +212,7 @@ async function action(element) {
     case 'person': openModal({type:'person',personId:id});break;
     case 'skip': state.hidden.push(id);save();closeModal();render();toast('Vorschlag übersprungen. Du kannst ihn später wieder einblenden.');break;
     case 'unhide': state.hidden=[];save();render();break;
-    case 'send-request': {const match=findMatches(state,people).find(m=>m.person.id===id);if(!match)throw new Error('Dieser Vorschlag ist nicht mehr aktiv.');createRequest(state,match.person,match.pairs[0]);save();closeModal();messageTab='requests';go('messages');toast('Demo-Anfrage gesendet. Du kannst die Annahme jetzt testen.');break;}
+    case 'send-request': {const match=visibleMatches().find(m=>m.person.id===id);if(!match)throw new Error('Dieser Vorschlag ist nicht mehr aktiv.');createRequest(state,match.person,match.pairs[0]);save();closeModal();messageTab='requests';go('messages');toast('Demo-Anfrage gesendet. Du kannst die Annahme jetzt testen.');break;}
     case 'focus': {const i=state.interests.find(t=>t.topicId===id);i.mode='day';i.expiresAt=Date.now()+DAY;i.paused=false;save();render();toast('Für 24 Stunden im Fokus. Dein dauerhaftes Interesse bleibt bestehen.');break;}
     case 'extend': {extendInterest(state.interests.find(t=>t.topicId===id));save();render();toast('Um 24 Stunden verlängert.');break;}
     case 'pause': {const i=state.interests.find(t=>t.topicId===id);if(i.paused){openModal({type:'editor',topicId:id});}else{i.paused=true;save();render();toast('Thema pausiert. Bestehende Chats bleiben erhalten.');}break;}
@@ -214,7 +221,7 @@ async function action(element) {
     case 'message-tab': messageTab=id;render();break;
     case 'demo-incoming': {const match=findMatches(state,people)[0];if(!match){toast('Wähle ein weiteres aktives Thema, um eine passende Demo-Anfrage zu erzeugen.');break;}createRequest(state,match.person,match.pairs[0],'in');save();messageTab='requests';render();toast('Eine eingehende Demo-Anfrage wurde erzeugt.');break;}
     case 'accept': {const chat=acceptRequest(state,id);currentChat=chat.id;save();render();break;}
-    case 'decline': state.requests=state.requests.filter(r=>r.id!==id);save();render();toast('Anfrage geschlossen.');break;
+    case 'decline': {const request=state.requests.find(r=>r.id===id);if(request&&!state.hidden.includes(request.personId))state.hidden.push(request.personId);state.requests=state.requests.filter(r=>r.id!==id);save();render();toast('Anfrage geschlossen.');break;}
     case 'open-chat': currentChat=id;render();scrollChat();break;
     case 'chat-back': currentChat=null;render();break;
     case 'demo-reply': {const chat=state.chats.find(c=>c.id===id);if(chat.ended||state.blocked.includes(chat.personId))throw new Error('Dieses Gespräch ist nicht mehr aktiv.');const replies=['Das klingt spannend. Was interessiert dich daran gerade besonders?','Ich mag es, wie viele verschiedene Seiten dieses Thema hat. Erzähl gern mehr.','Danke fürs Teilen! Genau für solche Gedanken ist ein Gespräch schön.'];chat.messages.push({from:'demo',text:replies[chat.messages.filter(m=>m.from==='demo').length%replies.length],time:Date.now()});save();render();scrollChat();break;}
@@ -225,7 +232,7 @@ async function action(element) {
     case 'end-chat': openModal({type:'confirm',kind:'end',chatId:id});break;
     case 'confirm-end': {const c=state.chats.find(c=>c.id===id);c.ended=true;if(!state.ended.includes(c.personId))state.ended.push(c.personId);save();closeModal();render();break;}
     case 'avatar': case 'color': {const form=document.querySelector('#profile-form');if(form){state.profile.name=form.elements.name.value;state.profile.bio=form.elements.bio.value;}state.profile[a]=id;save();render();break;}
-    case 'install': if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;}else openModal({type:'about'});toast('iPhone: Safari → Teilen → Zum Home-Bildschirm. Android: Browsermenü → App installieren.');break;
+    case 'install': if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;}else openModal({type:'install'});break;
     case 'reset': openModal({type:'confirm',kind:'reset'});break;
     case 'confirm-reset': {state=initialState();save();currentChat=null;tab='discover';topicFilter='all';location.hash='discover';modal={type:'welcome'};render();break;}
   }
