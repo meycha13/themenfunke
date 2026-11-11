@@ -1,0 +1,13 @@
+import { mkdir, copyFile, cp, writeFile, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const output=path.join(root,'docs');
+await mkdir(output,{recursive:true});
+const files=['index.html','app.js','core.js','data.js','styles.css','manifest.webmanifest','sw.js','icon.svg'];
+for(const file of files)await copyFile(path.join(root,file),path.join(output,file));
+await cp(path.join(root,'icons'),path.join(output,'icons'),{recursive:true});
+await writeFile(path.join(output,'.nojekyll'),'');
+const manifest=JSON.parse(await readFile(path.join(output,'manifest.webmanifest'),'utf8'));
+for(const icon of manifest.icons)await readFile(path.resolve(output,icon.src));
+console.log(`GitHub-Pages-App nach docs/ gebaut (${files.length} Quelldateien und App-Icons).`);
