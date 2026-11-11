@@ -34,6 +34,13 @@ Der Ordner `docs/` enthält die fertig erzeugte Website einschließlich `.nojeky
 
 ## Funktionen
 
+- Kompakte Startübersicht mit Matches, eingehenden Anfragen und aktiven Chats.
+- Sichtbare Neu-Zähler in Navigation und Benachrichtigungsglocke sowie ein Filter für neue Matches.
+- Kurzer Hinweis in der App bei neuen passenden Kontakten und Demo-Anfragen; bereits gemeldete Kontakte erzeugen beim erneuten Laden keinen weiteren Hinweis.
+- Gemeinsame Themen stehen auf den Kontaktkarten zuerst; verwandte Interessen werden separat erklärt.
+- Match-Hinweise lassen sich unter Profil → Benachrichtigungen ausschalten. Neu-Zähler bleiben verfügbar. Es handelt sich um Hinweise innerhalb der geöffneten App, nicht um System-Push.
+- Bestehende Profile, Themen und Chats bleiben beim Update erhalten.
+
 - Alle 14 Themenwelten mit mehrstufigem Themenbaum, Suche und wischbaren Themenkarten.
 - Jeder sinnvolle Oberbegriff ist direkt auswählbar; keine Pflicht, bis zu einem Blatt zu navigieren.
 - Gesprächsart: teilen, dazulernen, austauschen oder offen.
@@ -68,7 +75,7 @@ npm run build
 
 Eine beliebige statische HTTP-Entwicklungsumgebung kann die Dateien im Projektstamm oder `docs/` ausliefern. ES-Module benötigen HTTP(S); `index.html` nicht einfach per `file://` öffnen.
 
-Bei Änderungen erst die Tests ausführen und anschließend `npm run build` starten. Sowohl Quellcode als auch erzeugte `docs/`-Dateien committen. Bei Anpassungen am Offline-Cache die Versionskennung in `sw.js` erhöhen. Die GitHub-Action prüft Logik, Syntax und den Gleichstand von Quellcode und veröffentlichten Dateien.
+Bei Änderungen erst die Tests ausführen und anschließend `npm run build` starten. Sowohl Quellcode als auch erzeugte `docs/`-Dateien committen. Bei einer neuen App-Version die Versionskennungen in `package.json`, `index.html`, den Modulimporten in `app.js` und `core.js` sowie in `sw.js` gemeinsam erhöhen. Dadurch erhalten auch bestehende Installationen zueinander passende aktuelle Dateien. Die GitHub-Action prüft Logik, Syntax und den Gleichstand von Quellcode und veröffentlichten Dateien.
 
 ## Projektaufbau
 

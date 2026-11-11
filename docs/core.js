@@ -1,8 +1,8 @@
-import { topics } from './data.js';
+import { topics } from './data.js?v=0.2.0';
 export const DAY = 86400000;
 export const STORE = 'themenfunke-v1';
 export function initialState() {
-  return { version:1, started:false, profile:{ name:'Wolkenfuchs',avatar:'orbit',color:'sage',bio:'' }, interests:[], requests:[], chats:[], blocked:[], hidden:[], ended:[], reports:[], demoStart:Date.now() };
+  return { version:1, started:false, profile:{ name:'Wolkenfuchs',avatar:'orbit',color:'sage',bio:'' }, interests:[], requests:[], chats:[], blocked:[], hidden:[], ended:[], reports:[], seenMatches:[], notifiedMatches:[], matchAlerts:true, demoStart:Date.now() };
 }
 export function active(interest, now = Date.now()) {
   return !interest.paused && (interest.always || interest.expiresAt > now);
@@ -72,6 +72,19 @@ export function blockPerson(state,id) {
   if(!state.blocked.includes(id)) state.blocked.push(id);
   state.requests=state.requests.filter(r=>r.personId!==id);
 }
+export function unseenMatches(state,matches) {
+  const seen=new Set(state.seenMatches);
+  return matches.filter(match=>!seen.has(match.person.id));
+}
+export function registerMatchNotice(state,matches) {
+  const notified=new Set(state.notifiedMatches);
+  const fresh=unseenMatches(state,matches).filter(match=>!notified.has(match.person.id));
+  state.notifiedMatches=[...new Set([...state.notifiedMatches,...fresh.map(match=>match.person.id)])];
+  return fresh;
+}
+export function markMatchesSeen(state,ids) {
+  state.seenMatches=[...new Set([...state.seenMatches,...ids])];
+}
 export function loadState(storage) {
   try {
     const saved=JSON.parse(storage.getItem(STORE));
@@ -79,7 +92,8 @@ export function loadState(storage) {
       const state={...initialState(),...saved};
       state.profile={...initialState().profile,...saved.profile};
       state.interests=state.interests.filter(i=>topics.has(i.topicId));
-      for(const key of ['blocked','hidden','ended','reports']) if(!Array.isArray(state[key])) state[key]=[];
+      for(const key of ['blocked','hidden','ended','reports','seenMatches','notifiedMatches']) if(!Array.isArray(state[key])) state[key]=[];
+      state.matchAlerts=saved.matchAlerts!==false;
       return state;
     }
   } catch { /* Ungültige oder gesperrte lokale Speicherung: neue Sitzung. */ }

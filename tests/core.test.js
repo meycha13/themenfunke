@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { worlds,topics,people } from '../data.js';
-import { DAY,STORE,initialState,active,focused,upsertInterest,extendInterest,overlap,findMatches,createRequest,acceptRequest,blockPerson,loadState,escapeHtml } from '../core.js';
+import { DAY,STORE,initialState,active,focused,upsertInterest,extendInterest,overlap,findMatches,createRequest,acceptRequest,blockPerson,loadState,unseenMatches,registerMatchNotice,markMatchesSeen,escapeHtml } from '../core.js';
 
 const now=1800000000000;
 function setup(){const state=initialState();state.demoStart=now;return state;}
@@ -77,4 +77,48 @@ test('Gespeicherte Themen und freiwillige Texte werden geladen',()=>{
 test('Freitexte werden als Text ausgegeben und auf 300 Zeichen begrenzt',()=>{
   assert.equal(escapeHtml('<img src=x onerror="alert(1)">'), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
   const state=setup();interest(state,'meerestiere',{text:'x'.repeat(400)});assert.equal(state.interests[0].text.length,300);
+});
+test('Ein Match wird nur einmal gemeldet, auch nach erneutem Laden',()=>{
+  const state=setup();interest(state);
+  const matches=findMatches(state,people,now);
+  assert.ok(registerMatchNotice(state,matches).length);
+  assert.equal(registerMatchNotice(state,matches).length,0);
+  const reloaded=loadState({getItem:()=>JSON.stringify(state)});
+  assert.equal(registerMatchNotice(reloaded,findMatches(reloaded,people,now)).length,0);
+  assert.equal(unseenMatches(reloaded,matches).length,matches.length);
+});
+test('Gesehene Matches verlieren ihre Neu-Markierung und werden nicht erneut gemeldet',()=>{
+  const state=setup();interest(state);
+  const matches=findMatches(state,people,now);
+  markMatchesSeen(state,matches.map(m=>m.person.id));
+  assert.equal(unseenMatches(state,matches).length,0);
+  assert.equal(registerMatchNotice(state,matches).length,0);
+  markMatchesSeen(state,matches.map(m=>m.person.id));
+  assert.equal(state.seenMatches.length,matches.length);
+});
+test('Zusätzliche Themen melden nur tatsächlich neue Personen',()=>{
+  const state=setup();interest(state);
+  const first=findMatches(state,people,now);registerMatchNotice(state,first);
+  interest(state,'fotografie');
+  const fresh=registerMatchNotice(state,findMatches(state,people,now));
+  assert.ok(fresh.length);
+  assert.ok(fresh.every(m=>!first.some(old=>old.person.id===m.person.id)));
+});
+test('Abgelaufene und blockierte Kontakte zählen nicht als neue Matches',()=>{
+  const state=setup();interest(state);
+  const first=findMatches(state,people,now);assert.ok(first.length);
+  for(const match of first)blockPerson(state,match.person.id);
+  assert.equal(unseenMatches(state,findMatches(state,people,now)).length,0);
+  state.blocked=[];
+  assert.equal(unseenMatches(state,findMatches(state,people,now+DAY)).length,0);
+});
+test('Bestehende Profile und Chats bleiben bei der Erweiterung um Match-Hinweise erhalten',()=>{
+  const state=setup();interest(state);state.profile.name='Bestehendes Profil';
+  const m=findMatches(state,people,now)[0],r=createRequest(state,m.person,m.pairs[0],'out',now);
+  const chat=acceptRequest(state,r.id);chat.messages.push({from:'me',text:'Bleibt erhalten',time:now});
+  delete state.seenMatches;delete state.notifiedMatches;delete state.matchAlerts;
+  const loaded=loadState({getItem:()=>JSON.stringify(state)});
+  assert.equal(loaded.profile.name,'Bestehendes Profil');assert.equal(loaded.interests.length,1);
+  assert.equal(loaded.chats[0].messages[0].text,'Bleibt erhalten');
+  assert.deepEqual(loaded.seenMatches,[]);assert.deepEqual(loaded.notifiedMatches,[]);assert.equal(loaded.matchAlerts,true);
 });
