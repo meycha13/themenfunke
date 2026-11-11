@@ -1,4 +1,4 @@
-const VERSION='0.2.0';
+const VERSION='0.2.1';
 const CACHE=`themenfunke-v${VERSION}`;
 const BASE=new URL('./',self.location.href);
 const ASSETS=['./','./index.html',...['styles.css','app.js','core.js','data.js'].map(path=>`./${path}?v=${VERSION}`),'./manifest.webmanifest','./icon.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png','./icons/apple-touch-icon.png'];

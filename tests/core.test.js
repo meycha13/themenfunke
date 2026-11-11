@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { worlds,topics,people } from '../data.js';
-import { DAY,STORE,initialState,active,focused,upsertInterest,extendInterest,overlap,findMatches,createRequest,acceptRequest,blockPerson,loadState,unseenMatches,registerMatchNotice,markMatchesSeen,escapeHtml } from '../core.js';
+import { DAY,STORE,initialState,active,focused,upsertInterest,extendInterest,overlap,findMatches,createRequest,acceptRequest,blockPerson,loadState,unseenMatches,registerMatchNotice,markMatchesSeen,createDemoMatch,createDemoRequest,escapeHtml } from '../core.js';
 
 const now=1800000000000;
 function setup(){const state=initialState();state.demoStart=now;return state;}
@@ -121,4 +121,39 @@ test('Bestehende Profile und Chats bleiben bei der Erweiterung um Match-Hinweise
   assert.equal(loaded.profile.name,'Bestehendes Profil');assert.equal(loaded.interests.length,1);
   assert.equal(loaded.chats[0].messages[0].text,'Bleibt erhalten');
   assert.deepEqual(loaded.seenMatches,[]);assert.deepEqual(loaded.notifiedMatches,[]);assert.equal(loaded.matchAlerts,true);
+});
+test('Ein Test-Match funktioniert ohne aktive Themen und lässt sich wiederholen',()=>{
+  const state=setup();
+  const first=createDemoMatch(state,now),second=createDemoMatch(state,now);
+  assert.notEqual(first.id,second.id);assert.equal(state.interests.length,1);assert.equal(state.demoPeople.length,2);
+  const matches=findMatches(state,state.demoPeople,now);
+  assert.equal(matches.length,2);assert.ok(matches.every(m=>m.pairs[0].kind==='exact'));
+  assert.equal(unseenMatches(state,matches).length,2);
+});
+test('Neue Testkontakte funktionieren auch nach aufgebrauchten, blockierten und gesehenen Beispielen',()=>{
+  const state=setup();interest(state);
+  state.blocked=people.map(p=>p.id);state.seenMatches=people.map(p=>p.id);state.notifiedMatches=people.map(p=>p.id);
+  assert.equal(findMatches(state,people,now).length,0);
+  const person=createDemoMatch(state,now),matches=findMatches(state,[...people,...state.demoPeople],now);
+  assert.equal(matches.length,1);assert.equal(matches[0].person.id,person.id);
+  assert.equal(registerMatchNotice(state,matches).length,1);
+});
+test('Testanfragen sind wiederholbar und erhalten bestehende Chats und Einstellungen',()=>{
+  const state=setup();interest(state,'meerestiere',{mode:'always'});state.matchAlerts=false;
+  const first=createDemoRequest(state,now);const chat=acceptRequest(state,first.id);
+  chat.messages.push({from:'me',text:'Bleibt erhalten',time:now});
+  const second=createDemoRequest(state,now);
+  assert.notEqual(first.personId,second.personId);assert.equal(second.direction,'in');
+  assert.equal(state.chats[0].messages[0].text,'Bleibt erhalten');assert.equal(state.matchAlerts,false);
+  assert.equal(state.interests.length,1);
+  const loaded=loadState({getItem:()=>JSON.stringify(state)});
+  assert.equal(loaded.demoPeople.length,2);assert.equal(loaded.requests[0].personId,second.personId);
+  assert.ok(loaded.demoPeople.some(p=>p.id===loaded.chats[0].personId));
+});
+test('Ein Test mit pausierten Themen lässt deren Inhalt und Pausenstatus erhalten',()=>{
+  const state=setup();const original=interest(state);original.paused=true;
+  createDemoMatch(state,now);
+  assert.equal(state.interests.find(i=>i.topicId==='meerestiere').paused,true);
+  assert.equal(state.interests.find(i=>i.topicId==='meerestiere').text,'Kraken');
+  assert.ok(state.interests.some(i=>active(i,now)));
 });

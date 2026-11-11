@@ -1,8 +1,8 @@
-import { topics } from './data.js?v=0.2.0';
+import { topics } from './data.js?v=0.2.1';
 export const DAY = 86400000;
 export const STORE = 'themenfunke-v1';
 export function initialState() {
-  return { version:1, started:false, profile:{ name:'Wolkenfuchs',avatar:'orbit',color:'sage',bio:'' }, interests:[], requests:[], chats:[], blocked:[], hidden:[], ended:[], reports:[], seenMatches:[], notifiedMatches:[], matchAlerts:true, demoStart:Date.now() };
+  return { version:1, started:false, profile:{ name:'Wolkenfuchs',avatar:'orbit',color:'sage',bio:'' }, interests:[], requests:[], chats:[], blocked:[], hidden:[], ended:[], reports:[], seenMatches:[], notifiedMatches:[], matchAlerts:true, demoPeople:[], demoStart:Date.now() };
 }
 export function active(interest, now = Date.now()) {
   return !interest.paused && (interest.always || interest.expiresAt > now);
@@ -85,6 +85,27 @@ export function registerMatchNotice(state,matches) {
 export function markMatchesSeen(state,ids) {
   state.seenMatches=[...new Set([...state.seenMatches,...ids])];
 }
+export function createDemoMatch(state,now=Date.now()) {
+  let interest=state.interests.find(item=>active(item,now));
+  if(!interest){
+    const id=['meerestiere','fotografie','weltraum','windenergie'].find(topicId=>!state.interests.some(item=>item.topicId===topicId))||[...topics.values()].find(topic=>!topic.children.length&&!state.interests.some(item=>item.topicId===topic.id))?.id;
+    if(!id)throw new Error('Aktiviere zuerst eines deiner Themen, um einen Testkontakt zu erzeugen.');
+    interest=upsertInterest(state,id,{mode:'day',role:'open',text:''},now);
+  }
+  const person={
+    id:`demo-${crypto.randomUUID()}`,name:`Testkontakt ${state.demoPeople.length+1}`,avatar:'spark',color:'lavender',isTest:true,
+    bio:'Ein neu erzeugter Beispielkontakt zum Ausprobieren von Matches, Benachrichtigungen und Chats.',
+    interests:[{topicId:interest.topicId,role:interest.role==='learn'?'share':interest.role==='share'?'learn':'exchange',text:`Dies ist ein Testkontakt zu „${topics.get(interest.topicId).label}“. Du kannst eine Anfrage senden und den Demo-Chat ausprobieren.`,mode:'always'}]
+  };
+  state.demoPeople.push(person);
+  state.started=true;
+  return person;
+}
+export function createDemoRequest(state,now=Date.now()) {
+  const person=createDemoMatch(state,now);
+  const match=findMatches(state,[person],now)[0];
+  return createRequest(state,person,match.pairs[0],'in',now);
+}
 export function loadState(storage) {
   try {
     const saved=JSON.parse(storage.getItem(STORE));
@@ -92,7 +113,7 @@ export function loadState(storage) {
       const state={...initialState(),...saved};
       state.profile={...initialState().profile,...saved.profile};
       state.interests=state.interests.filter(i=>topics.has(i.topicId));
-      for(const key of ['blocked','hidden','ended','reports','seenMatches','notifiedMatches']) if(!Array.isArray(state[key])) state[key]=[];
+      for(const key of ['blocked','hidden','ended','reports','seenMatches','notifiedMatches','demoPeople']) if(!Array.isArray(state[key])) state[key]=[];
       state.matchAlerts=saved.matchAlerts!==false;
       return state;
     }

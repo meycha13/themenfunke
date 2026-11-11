@@ -13,7 +13,9 @@ Nach Aktivierung von GitHub Pages:
 3. Gesprächsart, Laufzeit und optionalen Freitext festlegen.
 4. Passende Beispielperson ansehen und eine Anfrage senden.
 5. Unter Nachrichten die Demo-Annahme testen und den Chat ausprobieren. Antworten entstehen nur über „Demo-Antwort simulieren“.
-6. Alternativ unter Nachrichten „Demo-Anfrage erhalten“ verwenden.
+6. Alternativ oben unter „Demo testen“ eine „Kontaktanfrage testen“.
+
+**Matches und Hinweise jederzeit testen:** Oben auf **Demo testen** tippen und **Neues Match testen** oder **Kontaktanfrage testen** wählen. Die Aktionen sind auch in der Benachrichtigungsglocke verfügbar. Jeder Klick legt einen neuen, klar bezeichneten Testkontakt an. Das funktioniert auch, wenn die bisherigen Beispielkontakte bereits gesehen, übersprungen oder in einem Chat sind. Vorhandene Chats bleiben erhalten. Ist kein Thema aktiv, wird ein zusätzliches Beispielthema für 24 Stunden angelegt. Manuell gestartete Tests zeigen ihren Hinweis auch dann, wenn automatische Match-Hinweise ausgeschaltet sind; die gespeicherte Einstellung bleibt unverändert.
 
 **Als App hinzufügen:** iPhone: Safari → Teilen → Zum Home-Bildschirm. Android: Browsermenü → App installieren / Zum Startbildschirm hinzufügen. Nach dem ersten vollständigen Laden ist der Prototyp offline nutzbar. Die Speicherung gilt für diesen Browser auf diesem Gerät; sie wird nicht mit anderen Geräten oder App-Installationen synchronisiert.
 
