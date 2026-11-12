@@ -1,4 +1,4 @@
-import { topics } from './data.js?v=0.2.1';
+import { topics } from './data.js?v=0.3.0';
 export const DAY = 86400000;
 export const STORE = 'themenfunke-v1';
 export function initialState() {
@@ -33,6 +33,7 @@ export function overlap(a,b) {
   return first.path.includes(b) || second.path.includes(a) ? 'related' : null;
 }
 export function demoInterests(person, state) {
+  if(person.isReal)return person.interests;
   return person.interests.map(i=>({...i,always:i.mode==='always',expiresAt:state.demoStart + DAY,paused:false}));
 }
 export function findMatches(state, people, now=Date.now()) {

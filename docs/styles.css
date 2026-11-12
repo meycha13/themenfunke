@@ -138,3 +138,9 @@
 .notification-test-panel>p{font-size:.74rem;color:#687d5d;line-height:1.7;margin:8px 0}
 .notification-test-panel .demo-test-actions{margin:13px 0}
 .notification-test-panel .demo-test-actions>.btn{font-size:.72rem}
+.online-status{display:flex;align-items:center;gap:9px;padding:10px 14px;margin-bottom:20px;background:#edf3e5;border:1px solid #dce6d1;border-radius:10px;font-size:.74rem;color:#527346;line-height:1.6}
+.online-status>.status-dot{flex-shrink:0}
+.online-status>.btn{margin-left:auto;font-size:.69rem}
+.form-error{color:#a64d3c;font-size:.8rem;line-height:1.6;margin:0 0 14px}
+#auth-form{margin:25px 0 20px}
+#auth-form input{font-size:16px}

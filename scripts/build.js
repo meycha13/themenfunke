@@ -1,12 +1,16 @@
 import { mkdir, copyFile, cp, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import {build} from 'esbuild';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const output=path.join(root,'docs');
 await mkdir(output,{recursive:true});
-const files=['index.html','app.js','core.js','data.js','styles.css','manifest.webmanifest','sw.js','icon.svg'];
+await mkdir(path.join(root,'vendor'),{recursive:true});
+await build({stdin:{contents:"export { createClient } from '@supabase/supabase-js';",resolveDir:root},bundle:true,format:'esm',platform:'browser',target:'es2022',minify:true,legalComments:'eof',outfile:path.join(root,'vendor/supabase.js')});
+const files=['index.html','app.js','core.js','data.js','backend.js','backend-config.js','styles.css','manifest.webmanifest','sw.js','icon.svg'];
 for(const file of files)await copyFile(path.join(root,file),path.join(output,file));
 await cp(path.join(root,'icons'),path.join(output,'icons'),{recursive:true});
+await cp(path.join(root,'vendor'),path.join(output,'vendor'),{recursive:true});
 await writeFile(path.join(output,'.nojekyll'),'');
 const manifest=JSON.parse(await readFile(path.join(output,'manifest.webmanifest'),'utf8'));
 for(const icon of manifest.icons)await readFile(path.resolve(output,icon.src));
