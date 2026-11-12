@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Themenfunke – Gemeinsam ins Gespräch",
-  "short_name": "Themenfunke",
-  "description": "Menschen über gemeinsame Gesprächsthemen entdecken. Mobiler Demo-Prototyp.",
+  "name": "Talkabout – Worüber möchtest du sprechen?",
+  "short_name": "Talkabout",
+  "description": "Finde Menschen, die deine aktuellen Gesprächsthemen teilen. Mit Pseudonym und frei gewähltem Avatar.",
   "lang": "de",
   "start_url": "./",
   "scope": "./",
@@ -10,8 +10,23 @@
   "background_color": "#faf9f6",
   "theme_color": "#244d43",
   "icons": [
-    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "./icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

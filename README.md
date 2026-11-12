@@ -1,6 +1,10 @@
-# themenfunke
+# Talkabout
 
-Eine mobile, installierbare Web-App für anonyme Kontakte über gemeinsame Gesprächsthemen. Die lokale Demo bleibt erhalten. Der Entwicklungsstand für echte pseudonyme Konten ergänzt Supabase-Anmeldung, gemeinsame Themen, Kontaktanfragen und geschützte Chats. Die Datenbank im verbundenen Supabase-Projekt ist eingerichtet. Den ersten App-Zugang legst du unter Authentication → Users → Add user → Create new user als bestätigtes Konto an; danach in der App auf Anmelden tippen. Details stehen in [supabase/README.md](supabase/README.md).
+**Worüber möchtest du sprechen?**
+
+Talkabout ist eine mobile, installierbare Web-App für pseudonyme Kontakte über gemeinsame Gesprächsthemen. Die lokale Demo bleibt erhalten. Der Entwicklungsstand für echte pseudonyme Konten ergänzt Supabase-Anmeldung, gemeinsame Themen, Kontaktanfragen und geschützte Chats. Die Datenbank im verbundenen Supabase-Projekt ist eingerichtet. Den ersten App-Zugang legst du unter Authentication → Users → Add user → Create new user als bestätigtes Konto an; danach in der App auf Anmelden tippen. Details stehen in [supabase/README.md](supabase/README.md).
+
+Die App hieß während der Entwicklung Themenfunke. Der bestehende GitHub-Testlink und die internen Speicherkennungen bleiben erhalten, damit laufende Anmeldungen, Profile und Demo-Daten weiterverwendet werden.
 
 ## Auf dem Handy testen
 

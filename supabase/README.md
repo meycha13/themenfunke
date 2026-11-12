@@ -12,7 +12,7 @@ Direkter Zugriff durch Browser-Benutzer auf sämtliche App-Tabellen ist gesperrt
 
 ## 2. Erste eingeladene Testkonten ohne zusätzlichen Mail-Dienst
 
-Im Supabase-Dashboard unter **Authentication → Users → Add user → Create new user** je Testperson ein App-Konto mit E-Mail und eigenem Passwort anlegen und als bestätigt markieren. Das Supabase-Dashboard-Konto ist kein automatisches Themenfunke-Konto. Passwörter niemals in GitHub-Dateien oder Chatnachrichten ablegen.
+Im Supabase-Dashboard unter **Authentication → Users → Add user → Create new user** je Testperson ein App-Konto mit E-Mail und eigenem Passwort anlegen und als bestätigt markieren. Das Supabase-Dashboard-Konto ist kein automatisches Talkabout-Konto. Passwörter niemals in GitHub-Dateien oder Chatnachrichten ablegen.
 
 Unter Authentication die öffentliche Selbstregistrierung für die eingeladene Testrunde deaktivieren; die Bestätigungspflicht für E-Mail-Konten aktiviert lassen. `signupEnabled` und `passwordResetEnabled` bleiben in `backend-config.js` zunächst `false`. Administrativ angelegte, bestätigte Testkonten können sich mit E-Mail und Passwort anmelden. Einladungs-, Bestätigungs- und Wiederherstellungs-E-Mails werden in dieser Stufe nicht versendet. Falls jemand sein Passwort verliert, muss der Betreiber den Zugang über die Benutzerverwaltung wiederherstellen.
 

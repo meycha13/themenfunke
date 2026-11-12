@@ -1,5 +1,5 @@
-import { createClient } from './vendor/supabase.js?v=0.3.0';
-import { backendConfig } from './backend-config.js?v=0.3.0';
+import { createClient } from './vendor/supabase.js?v=0.3.1';
+import { backendConfig } from './backend-config.js?v=0.3.1';
 
 export const configured=Boolean(backendConfig.url&&backendConfig.publishableKey?.startsWith('sb_publishable_'));
 export const client=configured?createClient(backendConfig.url,backendConfig.publishableKey,{

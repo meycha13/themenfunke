@@ -1,4 +1,4 @@
-import { topics } from './data.js?v=0.3.0';
+import { topics } from './data.js?v=0.3.1';
 export const DAY = 86400000;
 export const STORE = 'themenfunke-v1';
 export function initialState() {
