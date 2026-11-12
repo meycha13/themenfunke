@@ -1,6 +1,6 @@
 # themenfunke
 
-Eine mobile, installierbare Web-App für anonyme Kontakte über gemeinsame Gesprächsthemen. Die lokale Demo bleibt erhalten. Der Entwicklungsstand für echte pseudonyme Konten ergänzt Supabase-Anmeldung, gemeinsame Themen, Kontaktanfragen und geschützte Chats. Die Einrichtung ist in [supabase/README.md](supabase/README.md) beschrieben.
+Eine mobile, installierbare Web-App für anonyme Kontakte über gemeinsame Gesprächsthemen. Die lokale Demo bleibt erhalten. Der Entwicklungsstand für echte pseudonyme Konten ergänzt Supabase-Anmeldung, gemeinsame Themen, Kontaktanfragen und geschützte Chats. Die Datenbank im verbundenen Supabase-Projekt ist eingerichtet. Den ersten App-Zugang legst du unter Authentication → Users → Add user → Create new user als bestätigtes Konto an; danach in der App auf Anmelden tippen. Details stehen in [supabase/README.md](supabase/README.md).
 
 ## Auf dem Handy testen
 

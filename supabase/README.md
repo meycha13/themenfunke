@@ -6,9 +6,9 @@ Dieser Entwicklungsstand ergänzt die lokale Demo um echte, pseudonyme Konten ü
 
 In einem neuen Projekt den vollständigen Inhalt von `setup.sql` einmal im SQL Editor ausführen. Das Skript enthält die beiden Migrationen in Reihenfolge. Es legt die Themen, Profile, Gesprächswünsche, Anfragen, Chats, Nachrichten, Blockierungen, Gesehen-Markierungen und Meldungen an.
 
-Es werden keine existierenden Konten angelegt oder fremden Tabellen gelöscht. Nicht mehrfach als komplettes Skript ausführen. Für spätere Änderungen neue Migrationen hinzufügen; bereits angewendete Migrationen unverändert lassen.
+Das Projekt wurde über die verbundene Supabase-Anbindung eingerichtet; die Migrationen sind als `20261112073430_themenfunke_accounts` und `20261112073440_themenfunke_topics` registriert. Ein manuelles Einfügen in den SQL-Editor ist für dieses Projekt nicht mehr erforderlich. Es wurden keine persönlichen Konten angelegt oder fremde Tabellen gelöscht. Nicht mehrfach als komplettes Skript ausführen. Für spätere Änderungen neue Migrationen hinzufügen; bereits angewendete Migrationen unverändert lassen.
 
-Direkter Zugriff durch Browser-Benutzer auf sämtliche App-Tabellen ist gesperrt. Die beiden zugänglichen Funktionen `tf_snapshot` und `tf_command` prüfen die angemeldete, bestätigte Benutzeridentität. Hilfsfunktionen sind für anonyme und angemeldete Browser-Benutzer gesperrt. Themenablauf und Nachrichtenberechtigungen werden auf dem Server geprüft.
+Direkter Zugriff durch Browser-Benutzer auf sämtliche App-Tabellen ist gesperrt. Die beiden zugänglichen Funktionen `tf_snapshot` und `tf_command` prüfen die angemeldete, bestätigte Benutzeridentität. Privilegierte Implementierungen und Hilfsfunktionen liegen im nicht exponierten Schema `app_private`. Öffentliche Wrapper laufen als Security Invoker; nur die beiden erforderlichen privaten Operationen haben explizite Ausführungsrechte für angemeldete Benutzer. Hilfsfunktionen sind für anonyme und angemeldete Browser-Benutzer gesperrt. Explizite ablehnende RLS-Regeln sichern den direkten Tabellenzugriff zusätzlich ab. Themenablauf und Nachrichtenberechtigungen werden auf dem Server geprüft.
 
 ## 2. Erste eingeladene Testkonten ohne zusätzlichen Mail-Dienst
 
@@ -47,3 +47,5 @@ Vor Aktivierung einen eigenen SMTP-Dienst für Supabase Auth einrichten, Site UR
 Der Entwicklungs-Testserver unter `tests/fixtures/auth-server.mjs` bildet ausschließlich den Auth-Transport mit fiktiven Testkonten nach. Er verwendet dasselbe SQL-Schema und ist kein Server für echte Nutzer. Die lokale Browserprüfung ersetzt keine Anmeldung gegen das tatsächlich eingerichtete Supabase-Projekt.
 
 Für die optionale Browserprüfung werden Python und Playwright mit Chromium benötigt. Zuerst `npm run build`, danach in einem Terminal `node tests/fixtures/auth-server.mjs` und in einem zweiten `python tests/browser-online.py` ausführen. Der Test verwendet einen isolierten `.invalid`-Endpunkt und lokale Testkonten; die echte Supabase-Anmeldung wird nicht angesprochen. Er prüft auch einen Kontowechsel und die Abmeldung in mehreren Tabs.
+
+Im verbundenen Supabase-Projekt wurden Matching, Anfrageannahme und Nachrichtenaustausch zusätzlich in einer zurückgerollten Transaktion mit temporären Prüfdaten verifiziert. Der Security Advisor meldete nach Einrichtung keine Befunde. Der Performance Advisor zeigt nach frischer Einrichtung lediglich noch ungenutzte Indizes ([Erklärung](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index)); diese unterstützen die vorgesehenen Abfragen und Fremdschlüssel.

@@ -8,7 +8,7 @@ const db=new PGlite();
 await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,email_confirmed_at timestamptz);create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema public,auth to anon,authenticated;`);
 const users=[['10000000-0000-4000-8000-000000000001','alpha@test.invalid'],['10000000-0000-4000-8000-000000000002','beta@test.invalid']];
 for(const [id]of users)await db.query('insert into auth.users values($1,now())',[id]);
-for(const file of ['202611120001_themenfunke.sql','202611120002_topics.sql'])await db.exec(await readFile(path.join(root,'supabase/migrations',file),'utf8'));
+for(const file of ['20261112073430_themenfunke_accounts.sql','20261112073440_themenfunke_topics.sql'])await db.exec(await readFile(path.join(root,'supabase/migrations',file),'utf8'));
 const sessions=new Map();
 function session(id,email){
  const now=Math.floor(Date.now()/1000),encode=x=>Buffer.from(JSON.stringify(x)).toString('base64url');

@@ -7,14 +7,14 @@ test('Supabase-Schema: Konten, Eigentumsprüfung, Matching und vertrauliche Chat
  const db=new PGlite();
  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key,email_confirmed_at timestamptz); create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; grant usage on schema public,auth to anon,authenticated;`);
  for(const id of [A,B,C,U])await db.query('insert into auth.users values($1,$2)',[id,id===U?null:new Date().toISOString()]);
- for(const file of ['202611120001_themenfunke.sql','202611120002_topics.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['20261112073430_themenfunke_accounts.sql','20261112073440_themenfunke_topics.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
  async function as(id,sql,params=[]){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id||'']);await db.exec('set role authenticated');return db.query(sql,params);}
  const snapshot=async id=>(await as(id,'select public.tf_snapshot() as data')).rows[0].data;
  const command=async(id,action,payload)=>(await as(id,'select public.tf_command($1,$2::jsonb) as data',[action,JSON.stringify(payload||{})])).rows[0].data;
  await t.test('Nur bestätigte Konten können zugreifen; Tabellen und Hilfsfunktionen sind gesperrt',async()=>{
    await assert.rejects(snapshot(null));await assert.rejects(snapshot(U));
    await assert.rejects(as(A,'select * from public.tf_profiles'));
-   await assert.rejects(as(A,'select public.tf_profile_json($1)',[B]));
+   await assert.rejects(as(A,'select app_private.tf_profile_json($1)',[B]));
  });
  for(const id of [A,B,C])await snapshot(id);
  await t.test('Profil und Themen gehören immer dem angemeldeten Konto',async()=>{
