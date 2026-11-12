@@ -8,5 +8,14 @@
     "check": "node --check app.js && node --check core.js && node --check data.js && node --check sw.js",
     "build": "node scripts/build.js"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "esbuild": "^0.28.2"
+  }
 }
