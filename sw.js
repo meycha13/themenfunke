@@ -1,7 +1,7 @@
-const VERSION='0.2.1';
+const VERSION='0.3.0';
 const CACHE=`themenfunke-v${VERSION}`;
 const BASE=new URL('./',self.location.href);
-const ASSETS=['./','./index.html',...['styles.css','app.js','core.js','data.js'].map(path=>`./${path}?v=${VERSION}`),'./manifest.webmanifest','./icon.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png','./icons/apple-touch-icon.png'];
+const ASSETS=['./','./index.html',...['styles.css','app.js','core.js','data.js','backend.js','backend-config.js','vendor/supabase.js'].map(path=>`./${path}?v=${VERSION}`),'./manifest.webmanifest','./icon.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/maskable-512.png','./icons/apple-touch-icon.png'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(path=>new URL(path,BASE).href))).then(()=>self.skipWaiting()));
 });

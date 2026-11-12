@@ -1,10 +1,12 @@
-import { worlds, topics, people, roles, durations, avatars } from './data.js?v=0.2.1';
-import { DAY, STORE, initialState, active, focused, upsertInterest, extendInterest, findMatches, createRequest, acceptRequest, blockPerson, loadState, unseenMatches, registerMatchNotice, markMatchesSeen, createDemoMatch, createDemoRequest, escapeHtml as esc } from './core.js?v=0.2.1';
+import * as backend from './backend.js?v=0.3.0';
+import { worlds, topics, people, roles, durations, avatars } from './data.js?v=0.3.0';
+import { DAY, STORE, initialState, active, focused, upsertInterest, extendInterest, findMatches, createRequest, acceptRequest, blockPerson, loadState, unseenMatches, registerMatchNotice, markMatchesSeen, createDemoMatch, createDemoRequest, escapeHtml as esc } from './core.js?v=0.3.0';
 
 let state;
 try { state=loadState(localStorage); } catch { state=initialState(); }
 let tab=['discover','topics','messages','profile'].includes(location.hash.slice(1))?location.hash.slice(1):'discover';
 let modal=null, topicFilter='all', matchFilter='all', messageTab='chats', currentChat=null, installPrompt=null, storageFailed=false, toastTimer, matchNotice=null, noticeTimer;
+let onlineMode=false, onlinePeople=[], onlineSession=null, remoteBusy=false, remoteSyncing=false, remoteSignature='', remoteError='', remotePrefs={}, remoteGeneration=0;
 const app=document.querySelector('#app'), modalRoot=document.querySelector('#modal-root');
 const paths={
   leaf:'M20 4c-8-1-16 2-16 9a7 7 0 0 0 7 7c7 0 10-8 9-16ZM4 20l10-10',
@@ -38,7 +40,7 @@ const button=(text,action,cls='btn',extra='')=>`<button type="button" class="${c
 const label=id=>topics.get(id)?.label||'Thema';
 const topicPath=id=>topics.get(id)?.path.map(label).join(' › ')||'';
 const worldFor=id=>worlds.find(w=>w.id===topics.get(id)?.world)||worlds[0];
-const allPeople=()=>[...people,...state.demoPeople];
+const allPeople=()=>onlineMode?onlinePeople:[...people,...state.demoPeople];
 const personById=id=>allPeople().find(p=>p.id===id);
 const formatTime=time=>new Intl.DateTimeFormat('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(time);
 function status(i) {
@@ -48,7 +50,7 @@ function status(i) {
   return i.expiresAt>Date.now()?`Aktiv bis ${formatTime(i.expiresAt)}`:'Abgelaufen';
 }
 function save() {
-  try { localStorage.setItem(STORE,JSON.stringify(state)); storageFailed=false; }
+  try { if(onlineMode){remotePrefs.notifiedMatches=state.notifiedMatches;localStorage.setItem('themenfunke-online-'+onlineSession.user.id,JSON.stringify(remotePrefs));}else localStorage.setItem(STORE,JSON.stringify(state)); storageFailed=false; }
   catch { storageFailed=true; toast('Der Browser kann gerade nicht speichern. Deine Änderungen gelten für diese Sitzung.'); }
 }
 function toast(text) {
@@ -101,9 +103,9 @@ function render() {
   app.innerHTML=`<aside class="sidebar"><a class="brand" href="#discover">${icon('spark')}<span>themen<span class="brand-light">funke</span><small>GEMEINSAM INS GESPRÄCH</small></span></a>
     <nav aria-label="Hauptnavigation">${navItems.map(([id,i,title])=>button(`${icon(i)}<span>${title}</span>${navCount(id)?`<span class="nav-count">${navCount(id)}</span>`:''}`,'nav',`nav-item ${tab===id?'selected':''}`,`data-tab="${id}" ${tab===id?'aria-current="page"':''}`)).join('')}</nav>
     <div class="sidebar-bottom"><div class="privacy-note">${icon('shield')}<div>Du entscheidest,<br>was du teilst.</div></div>${button(`${avatar(state.profile)}<span>${esc(state.profile.name)}<small>Dein Profil</small></span>${icon('chevron')}`,'nav','profile-shortcut','data-tab="profile"')}</div></aside>
-    <div class="app-body"><header class="topbar"><a href="#discover" class="brand mobile-brand">${icon('spark')}<span>themen<span class="brand-light">funke</span></span></a><span class="desktop-greeting">Deine Themen. Deine Kontakte.</span><div class="topbar-actions">${button('Demo testen','demo','demo-pill')}${button(`${icon('bell')}${notificationCount?`<span class="bell-count">${notificationCount}</span>`:''}`,'notifications','icon-btn notification-button',`aria-label="Benachrichtigungen${notificationCount?`: ${notificationCount} neue Matches und Anfragen`:''}"`)}</div></header>
-    <main id="main" tabindex="-1">${storageFailed?'<div class="notice">Speichern ist in diesem Browser derzeit nicht möglich. Änderungen gelten nur für diese Sitzung.</div>':''}${tab==='discover'?discoverView():tab==='topics'?topicsView():tab==='messages'?messagesView():profileView()}</main>
-    <footer class="app-footer">Ein Thema verbindet. Du entscheidest, was daraus wird.<span>Prototyp · Beispielpersonen · Speicherung auf diesem Gerät</span></footer></div>
+    <div class="app-body"><header class="topbar"><a href="#discover" class="brand mobile-brand">${icon('spark')}<span>themen<span class="brand-light">funke</span></span></a><span class="desktop-greeting">Deine Themen. Deine Kontakte.</span><div class="topbar-actions">${button(onlineMode?'Mein Konto':'Anmelden','account','demo-pill')}${!onlineMode?button('Demo testen','demo','demo-pill'):''}${button(`${icon('bell')}${notificationCount?`<span class="bell-count">${notificationCount}</span>`:''}`,'notifications','icon-btn notification-button',`aria-label="Benachrichtigungen${notificationCount?`: ${notificationCount} neue Matches und Anfragen`:''}"`)}</div></header>
+    <main id="main" tabindex="-1">${onlineMode?`<div class="online-status"><span class="status-dot"></span><span>Echte Kontakte · ${remoteError?esc(remoteError):'Mit deinem Konto verbunden'}</span>${remoteError?button('Erneut verbinden','online-refresh','btn text'):''}</div>`:''}${storageFailed?'<div class="notice">Speichern ist in diesem Browser derzeit nicht möglich. Änderungen gelten nur für diese Sitzung.</div>':''}${tab==='discover'?discoverView():tab==='topics'?topicsView():tab==='messages'?messagesView():profileView()}</main>
+    <footer class="app-footer">Ein Thema verbindet. Du entscheidest, was daraus wird.<span>${onlineMode?'Echte Konten · Speicherung bei Supabase':'Prototyp · Beispielpersonen · Speicherung auf diesem Gerät'}</span></footer></div>
     <nav class="mobile-nav" aria-label="Mobile Hauptnavigation">${navItems.map(([id,i,title])=>button(`${icon(i)}<span>${title}</span>${navCount(id)?`<span class="mobile-count">${navCount(id)}</span>`:''}`,'nav',`${tab===id?'selected':''}`,`data-tab="${id}" ${tab===id?'aria-current="page"':''}`)).join('')}</nav>`;
   renderModal();
   renderMatchNotice();
@@ -122,14 +124,14 @@ function discoverView() {
       ${button(`<span class="overview-icon">${icon('chat')}</span><span class="overview-value">${chatCount}</span><span class="overview-label">Chats</span><span class="overview-detail">${chatCount?'Ins Gespräch gehen':'Nach Annahme'}</span>`,'show-chats','overview-card')}
     </section>
     <div class="discover-grid"><section class="people-section" aria-label="Passende Kontakte"><div class="matches-toolbar"><div class="segmented match-tabs">${button(`Alle <span>${allMatches.length}</span>`,'match-filter',matchFilter==='all'?'selected':'','data-id="all"')}${button(`Neu <span>${unread.length}</span>`,'match-filter',matchFilter==='new'?'selected':'','data-id="new"')}</div><label class="match-topic-filter"><span class="sr-only">Nach deinem Thema filtern</span><select id="match-topic-filter"><option value="all">Alle meine Themen</option>${interests.map(i=>`<option value="${i.topicId}" ${topicFilter===i.topicId?'selected':''}>${esc(label(i.topicId))}</option>`).join('')}</select></label></div>
-    ${matches.length?`${exact.length?`<section class="match-section"><div class="match-section-heading"><h2>${icon('check')} Gleiche Themen</h2><span>${exact.length}</span></div><div class="match-list">${exact.map(matchCard).join('')}</div></section>`:''}${related.length?`<section class="match-section related-section"><div class="match-section-heading"><h2>${icon('tree')} Verwandte Interessen</h2><span>${related.length}</span></div><p class="related-explanation">Eure Themen liegen im selben Zweig. Schau nach, ob der Schwerpunkt für dich passt.</p><div class="match-list">${related.map(matchCard).join('')}</div></section>`:''}`:emptyState(matchFilter==='new'?'Du bist auf dem neuesten Stand.':interests.length?'Noch keine passenden Kontakte.':'Worüber möchtest du sprechen?',matchFilter==='new'?'Du hast alle neuen Matches in dieser Auswahl angesehen. Deine übrigen Kontakte findest du unter „Alle“.':interests.length?'Wähle ein weiteres Thema, um mehr passende Beispielpersonen zu entdecken.':'Wähle dein erstes Thema. Danach erscheinen hier deine Matches.',matchFilter==='new'?button('Alle Matches ansehen','show-matches','btn primary'):button(`${icon('plus')} Thema wählen`,'catalog','btn primary')+(state.hidden.length?button('Übersprungene wieder zeigen','unhide','btn secondary'):''),'people')}
-    <p class="demo-caption">${icon('info')} Demo mit Beispielpersonen. Schreiben könnt ihr nach Annahme der Anfrage.</p></section><aside class="right-rail"><section class="rail-card"><div class="section-heading"><h3>Deine aktiven Themen</h3>${icon('grid')}</div>${interests.length?interests.slice(0,4).map(i=>`<button class="rail-topic" data-action="edit-topic" data-id="${i.topicId}"><span class="topic-symbol ${worldFor(i.topicId).color}">${icon(worldFor(i.topicId).icon)}</span><span><strong>${esc(label(i.topicId))}</strong><small>${focused(i)?'Heute im Fokus':i.always?'Dauerhaft':'Gerade aktiv'}</small></span>${icon('chevron')}</button>`).join(''):'<p>Ein Thema genügt für den Anfang.</p>'}${button('Themen verwalten','nav','btn soft full','data-tab="topics"')}</section></aside></div>`;
+    ${matches.length?`${exact.length?`<section class="match-section"><div class="match-section-heading"><h2>${icon('check')} Gleiche Themen</h2><span>${exact.length}</span></div><div class="match-list">${exact.map(matchCard).join('')}</div></section>`:''}${related.length?`<section class="match-section related-section"><div class="match-section-heading"><h2>${icon('tree')} Verwandte Interessen</h2><span>${related.length}</span></div><p class="related-explanation">Eure Themen liegen im selben Zweig. Schau nach, ob der Schwerpunkt für dich passt.</p><div class="match-list">${related.map(matchCard).join('')}</div></section>`:''}`:emptyState(matchFilter==='new'?'Du bist auf dem neuesten Stand.':interests.length?'Noch keine passenden Kontakte.':'Worüber möchtest du sprechen?',matchFilter==='new'?'Du hast alle neuen Matches in dieser Auswahl angesehen. Deine übrigen Kontakte findest du unter „Alle“.':interests.length?onlineMode?'Sobald andere Personen ein passendes Thema aktiv haben, erscheinen sie hier. Du kannst weitere Themen auswählen.':'Wähle ein weiteres Thema, um mehr passende Beispielpersonen zu entdecken.':'Wähle dein erstes Thema. Danach erscheinen hier deine Matches.',matchFilter==='new'?button('Alle Matches ansehen','show-matches','btn primary'):button(`${icon('plus')} Thema wählen`,'catalog','btn primary')+(state.hidden.length?button('Übersprungene wieder zeigen','unhide','btn secondary'):''),'people')}
+    <p class="demo-caption">${icon('info')} ${onlineMode?'Schreiben könnt ihr nach Annahme der Kontaktanfrage.':'Demo mit Beispielpersonen. Schreiben könnt ihr nach Annahme der Anfrage.'}</p></section><aside class="right-rail"><section class="rail-card"><div class="section-heading"><h3>Deine aktiven Themen</h3>${icon('grid')}</div>${interests.length?interests.slice(0,4).map(i=>`<button class="rail-topic" data-action="edit-topic" data-id="${i.topicId}"><span class="topic-symbol ${worldFor(i.topicId).color}">${icon(worldFor(i.topicId).icon)}</span><span><strong>${esc(label(i.topicId))}</strong><small>${focused(i)?'Heute im Fokus':i.always?'Dauerhaft':'Gerade aktiv'}</small></span>${icon('chevron')}</button>`).join(''):'<p>Ein Thema genügt für den Anfang.</p>'}${button('Themen verwalten','nav','btn soft full','data-tab="topics"')}</section></aside></div>`;
 }
 function matchCard(match) {
   const {person,pairs}=match,pair=pairs[0],world=worldFor(pair.mine.topicId);
   const exactTopics=[...new Set(pairs.filter(p=>p.kind==='exact').map(p=>p.mine.topicId))];
   const isNew=!state.seenMatches.includes(person.id);
-  return `<article class="match-card ${isNew?'is-new':''}"><div class="match-topic ${pair.kind==='exact'?world.color:'sand'}"><div class="match-topic-title">${icon(pair.kind==='exact'?'check':'tree')}<strong>${pair.kind==='exact'?`${exactTopics.length} ${exactTopics.length===1?'gemeinsames Thema':'gemeinsame Themen'}`:'Verwandtes Interesse'}</strong></div><div class="shared-topic-list">${(exactTopics.length?exactTopics:[pair.mine.topicId]).slice(0,3).map(id=>`<span>${esc(label(id))}</span>`).join('')}${exactTopics.length>3?`<span>+${exactTopics.length-3}</span>`:''}</div></div><div class="match-content"><div class="person-heading">${avatar(person)}<div><h3>${esc(person.name)}${isNew?'<span class="new-match-label">Neu</span>':''}</h3><span>${focused(pair.theirs)?'<span class="little-dot"></span> Heute besonders aktuell':pair.theirs.always?'Dauerhaftes Interesse':'Gerade aktiv'}</span></div><span class="example-tag">Beispiel</span></div><span class="role-label">${icon(pair.theirs.role==='learn'?'book':'chat')}${esc(roles[pair.theirs.role])}</span><p class="person-quote">„${esc(pair.theirs.text)}“</p>${pair.kind==='related'?`<p class="related-note">${esc(person.name)} hat „${esc(label(pair.theirs.topicId))}“ gewählt.</p>`:''}<div class="card-actions">${button(`Kontakt ansehen ${icon('arrow')}`,'person','btn primary',`data-id="${person.id}"`)}${button('Überspringen','skip','btn text',`data-id="${person.id}"`)}</div></div></article>`;
+  return `<article class="match-card ${isNew?'is-new':''}"><div class="match-topic ${pair.kind==='exact'?world.color:'sand'}"><div class="match-topic-title">${icon(pair.kind==='exact'?'check':'tree')}<strong>${pair.kind==='exact'?`${exactTopics.length} ${exactTopics.length===1?'gemeinsames Thema':'gemeinsame Themen'}`:'Verwandtes Interesse'}</strong></div><div class="shared-topic-list">${(exactTopics.length?exactTopics:[pair.mine.topicId]).slice(0,3).map(id=>`<span>${esc(label(id))}</span>`).join('')}${exactTopics.length>3?`<span>+${exactTopics.length-3}</span>`:''}</div></div><div class="match-content"><div class="person-heading">${avatar(person)}<div><h3>${esc(person.name)}${isNew?'<span class="new-match-label">Neu</span>':''}</h3><span>${focused(pair.theirs)?'<span class="little-dot"></span> Heute besonders aktuell':pair.theirs.always?'Dauerhaftes Interesse':'Gerade aktiv'}</span></div>${!onlineMode?'<span class="example-tag">Beispiel</span>':''}</div><span class="role-label">${icon(pair.theirs.role==='learn'?'book':'chat')}${esc(roles[pair.theirs.role])}</span><p class="person-quote">„${esc(pair.theirs.text)}“</p>${pair.kind==='related'?`<p class="related-note">${esc(person.name)} hat „${esc(label(pair.theirs.topicId))}“ gewählt.</p>`:''}<div class="card-actions">${button(`Kontakt ansehen ${icon('arrow')}`,'person','btn primary',`data-id="${person.id}"`)}${button('Überspringen','skip','btn text',`data-id="${person.id}"`)}</div></div></article>`;
 }
 function emptyState(title,text,actions='',symbol='spark') {
   return `<div class="empty-state"><span class="empty-symbol">${icon(symbol)}</span><h3>${title}</h3><p>${text}</p><div class="empty-actions">${actions}</div></div>`;
@@ -148,34 +150,34 @@ function messagesView() {
   if(currentChat) return chatView(state.chats.find(c=>c.id===currentChat));
   return `<div class="page-heading"><div><span class="eyebrow">AUS THEMEN WERDEN GESPRÄCHE</span><h1>Nachrichten</h1><p>Du entscheidest, mit wem du schreiben möchtest.</p></div></div><div class="segmented message-tabs">${button(`Gespräche <span>${state.chats.length}</span>`,'message-tab',messageTab==='chats'?'selected':'','data-id="chats"')}${button(`Anfragen <span>${state.requests.length}</span>`,'message-tab',messageTab==='requests'?'selected':'','data-id="requests"')}</div>
 
-    ${messageTab==='chats'?(state.chats.length?`<div class="conversation-list">${state.chats.map(c=>{const p=personById(c.personId);const last=c.messages.at(-1);return button(`${avatar(p)}<span class="conversation-info"><strong>${esc(p.name)}${state.blocked.includes(p.id)?' · Blockiert':c.ended?' · Beendet':''}</strong><small>${esc(last?.text||'Euer Gespräch kann beginnen.')}</small><span class="badge">${esc(label(c.pair.mine.topicId))}</span></span>${icon('chevron')}`,'open-chat','conversation-row',`data-id="${c.id}"`);}).join('')}</div>`:emptyState('Hier ist Platz für ein gutes Gespräch.','Sobald eine Kontaktanfrage angenommen wird, erscheint euer Chat hier.',button('Menschen entdecken','nav','btn primary','data-tab="discover"'),'chat')):(state.requests.length?`<div class="request-list">${[...state.requests].sort((a,b)=>(a.direction==='in'?0:1)-(b.direction==='in'?0:1)).map(requestCard).join('')}</div>`:emptyState('Noch keine offenen Anfragen.','Entdecke passende Menschen oder spiele eine eingehende Anfrage im Demo-Modus durch.',button('Menschen entdecken','nav','btn primary','data-tab="discover"'),'chat'))}<details class="demo-tools"><summary>Demo-Funktionen ausprobieren</summary><p>Alle Kontakte sind Beispielpersonen. Du kannst eine eingehende Anfrage erzeugen oder eine versandte Anfrage testweise annehmen.</p>${demoButtons()}</details>`;
+    ${messageTab==='chats'?(state.chats.length?`<div class="conversation-list">${state.chats.map(c=>{const p=personById(c.personId);const last=c.messages.at(-1);return button(`${avatar(p)}<span class="conversation-info"><strong>${esc(p.name)}${state.blocked.includes(p.id)?' · Blockiert':c.ended?' · Beendet':''}</strong><small>${esc(last?.text||'Euer Gespräch kann beginnen.')}</small><span class="badge">${esc(label(c.pair.mine.topicId))}</span></span>${icon('chevron')}`,'open-chat','conversation-row',`data-id="${c.id}"`);}).join('')}</div>`:emptyState('Hier ist Platz für ein gutes Gespräch.','Sobald eine Kontaktanfrage angenommen wird, erscheint euer Chat hier.',button('Menschen entdecken','nav','btn primary','data-tab="discover"'),'chat')):(state.requests.length?`<div class="request-list">${[...state.requests].sort((a,b)=>(a.direction==='in'?0:1)-(b.direction==='in'?0:1)).map(requestCard).join('')}</div>`:emptyState('Noch keine offenen Anfragen.','Entdecke passende Menschen oder spiele eine eingehende Anfrage im Demo-Modus durch.',button('Menschen entdecken','nav','btn primary','data-tab="discover"'),'chat'))}${!onlineMode?`<details class="demo-tools"><summary>Demo-Funktionen ausprobieren</summary><p>Alle Kontakte sind Beispielpersonen. Du kannst eine eingehende Anfrage erzeugen oder eine versandte Anfrage testweise annehmen.</p>${demoButtons()}</details>`:''}`;
 }
 function requestCard(r) {
   const p=personById(r.personId),incoming=r.direction==='in';
   const interest=state.interests.find(i=>i.topicId===r.pair.mine.topicId);
-  return `<article class="request-card"><div class="person-heading">${avatar(p)}<div><h3>${esc(p.name)}</h3><span>${incoming?'Neue Anfrage · wartet auf dich':'Anfrage gesendet · wartet auf Annahme'}</span></div><span class="example-tag">Beispiel</span></div><span class="badge">${esc(label(r.pair.mine.topicId))}</span><p>„${esc(r.pair.theirs.text)}“</p><small>${!interest||!active(interest)?'Zum Zeitpunkt der Anfrage aktiv · ':''}Angaben vom ${formatTime(r.createdAt)}</small><div class="card-actions">${button(incoming?'Annehmen':'Demo: Annahme testen','accept','btn primary',`data-id="${r.id}"`)}${button(incoming?'Ablehnen':'Zurückziehen','decline','btn secondary',`data-id="${r.id}"`)}${button(icon('more'),'person-menu','icon-btn',`data-id="${p.id}" aria-label="Weitere Kontaktaktionen"`)}</div></article>`;
+  return `<article class="request-card"><div class="person-heading">${avatar(p)}<div><h3>${esc(p.name)}</h3><span>${incoming?'Neue Anfrage · wartet auf dich':'Anfrage gesendet · wartet auf Annahme'}</span></div>${!onlineMode?'<span class="example-tag">Beispiel</span>':''}</div><span class="badge">${esc(label(r.pair.mine.topicId))}</span><p>„${esc(r.pair.theirs.text)}“</p><small>${!interest||!active(interest)?'Zum Zeitpunkt der Anfrage aktiv · ':''}Angaben vom ${formatTime(r.createdAt)}</small><div class="card-actions">${incoming||!onlineMode?button(incoming?'Annehmen':'Demo: Annahme testen','accept','btn primary',`data-id="${r.id}"`):''}${button(incoming?'Ablehnen':'Zurückziehen','decline','btn secondary',`data-id="${r.id}"`)}${button(icon('more'),'person-menu','icon-btn',`data-id="${p.id}" aria-label="Weitere Kontaktaktionen"`)}</div></article>`;
 }
 function chatView(chat) {
   if(!chat) { currentChat=null; return messagesView(); }
   const p=personById(chat.personId),locked=state.blocked.includes(p.id)||chat.ended;
-  return `<section class="chat-layout"><header class="chat-header">${button(icon('back'),'chat-back','icon-btn','aria-label="Zurück zu Gesprächen"')}${avatar(p,'small')}<div><h2>${esc(p.name)}</h2><small>Beispielperson · Demo-Chat</small></div>${button(icon('more'),'person-menu','icon-btn',`data-id="${p.id}" aria-label="Kontaktaktionen"`)}</header><details class="chat-context"><summary>Euer Gesprächseinstieg: ${esc(label(chat.pair.mine.topicId))}</summary><p><strong>Du:</strong> ${esc(chat.pair.mine.text||roles[chat.pair.mine.role])}</p><p><strong>${esc(p.name)}:</strong> ${esc(chat.pair.theirs.text)}</p><small>Stand bei der Kontaktanfrage. Das Thema darf sich im Gespräch frei entwickeln.</small></details><div class="chat-messages" aria-live="polite"><div class="chat-start">${icon('sprout')}<p>Ein gemeinsames Thema. Der Rest liegt bei euch.</p><small>Es gibt keine vorgegebene Frage.</small></div>${chat.messages.map(m=>`<div class="message ${m.from==='me'?'mine':'theirs'}"><p>${esc(m.text).replaceAll('\n','<br>')}</p><small>${m.from==='demo'?'Simulierte Antwort · ':''}${new Intl.DateTimeFormat('de-DE',{hour:'2-digit',minute:'2-digit'}).format(m.time)}</small></div>`).join('')}</div>${locked?`<div class="notice">${state.blocked.includes(p.id)?'Du hast diese Person blockiert.':'Dieses Gespräch wurde beendet.'} Der Verlauf bleibt für dich lesbar.</div>`:`<div class="demo-reply">${button(`${icon('spark')} Demo-Antwort simulieren`,'demo-reply','btn text',`data-id="${chat.id}"`)}</div><form id="chat-form" class="chat-compose" data-id="${chat.id}"><label class="sr-only" for="message-input">Nachricht</label><textarea id="message-input" name="message" rows="1" maxlength="3000" placeholder="Was möchtest du erzählen?" required>${esc(chat.draft||'')}</textarea><button class="send-button" type="submit" aria-label="Nachricht senden">${icon('send')}</button></form>`}</section>`;
+  return `<section class="chat-layout"><header class="chat-header">${button(icon('back'),'chat-back','icon-btn','aria-label="Zurück zu Gesprächen"')}${avatar(p,'small')}<div><h2>${esc(p.name)}</h2><small>${onlineMode?'Gemeinsamer Chat':'Beispielperson · Demo-Chat'}</small></div>${button(icon('more'),'person-menu','icon-btn',`data-id="${p.id}" aria-label="Kontaktaktionen"`)}</header><details class="chat-context"><summary>Euer Gesprächseinstieg: ${esc(label(chat.pair.mine.topicId))}</summary><p><strong>Du:</strong> ${esc(chat.pair.mine.text||roles[chat.pair.mine.role])}</p><p><strong>${esc(p.name)}:</strong> ${esc(chat.pair.theirs.text)}</p><small>Stand bei der Kontaktanfrage. Das Thema darf sich im Gespräch frei entwickeln.</small></details><div class="chat-messages" aria-live="polite"><div class="chat-start">${icon('sprout')}<p>Ein gemeinsames Thema. Der Rest liegt bei euch.</p><small>Es gibt keine vorgegebene Frage.</small></div>${chat.messages.map(m=>`<div class="message ${m.from==='me'?'mine':'theirs'}"><p>${esc(m.text).replaceAll('\n','<br>')}</p><small>${m.from==='demo'?'Simulierte Antwort · ':''}${new Intl.DateTimeFormat('de-DE',{hour:'2-digit',minute:'2-digit'}).format(m.time)}</small></div>`).join('')}</div>${locked?`<div class="notice">${state.blocked.includes(p.id)?'Du hast diese Person blockiert.':'Dieses Gespräch wurde beendet.'} Der Verlauf bleibt für dich lesbar.</div>`:`${!onlineMode?`<div class="demo-reply">${button(`${icon('spark')} Demo-Antwort simulieren`,'demo-reply','btn text',`data-id="${chat.id}"`)}</div>`:''}<form id="chat-form" class="chat-compose" data-id="${chat.id}"><label class="sr-only" for="message-input">Nachricht</label><textarea id="message-input" name="message" rows="1" maxlength="3000" placeholder="Was möchtest du erzählen?" required>${esc(chat.draft||'')}</textarea><button class="send-button" type="submit" aria-label="Nachricht senden">${icon('send')}</button></form>`}</section>`;
 }
 function profileView() {
-  return `<div class="page-heading"><div><span class="eyebrow">SO VIEL DU MÖCHTEST. SO WENIG DU MUSST.</span><h1>Dein Profil</h1><p>Deine Themen sagen schon viel. Alles Weitere ist freiwillig.</p></div></div><div class="profile-grid"><section class="panel"><form id="profile-form"><div class="profile-intro">${avatar(state.profile,'large')}<div><h2>Dein Auftritt</h2><p>Ein Pseudonym genügt.</p></div></div><label for="profile-name">Pseudonym</label><input id="profile-name" name="name" maxlength="28" required value="${esc(state.profile.name)}" autocomplete="nickname"><fieldset><legend>Dein Avatar</legend><div class="avatar-options">${avatars.map(a=>button(avatar({...state.profile,avatar:a}),'avatar',`avatar-option ${state.profile.avatar===a?'selected':''}`,`data-id="${a}" aria-label="Avatar ${a}" aria-pressed="${state.profile.avatar===a}"`)).join('')}</div></fieldset><fieldset><legend>Deine Farbe</legend><div class="color-options">${['sage','peach','lavender','blue','sand'].map(c=>button(state.profile.color===c?icon('check'):'','color',`color-option ${c}`,`data-id="${c}" aria-label="Farbe ${c}" aria-pressed="${state.profile.color===c}"`)).join('')}</div></fieldset><label for="profile-bio">Ein paar Worte über dich <span class="optional">optional</span></label><textarea id="profile-bio" name="bio" rows="3" maxlength="300" placeholder="Was möchtest du anderen mitgeben?">${esc(state.profile.bio)}</textarea><p class="field-hint">Dein Pseudonym, Avatar, aktive Themen und dieser Text sind für passende Kontakte sichtbar.</p><button class="btn primary" type="submit">Änderungen speichern</button></form></section><div class="profile-aside"><section class="panel"><h2>Auf deinem Handy</h2><p>Öffne Themenfunke wie eine App direkt vom Startbildschirm.</p>${button(`${icon('download')} App hinzufügen`,'install','btn secondary full')}<small>Auf iPhone: Safari → Teilen → Zum Home-Bildschirm. Auf Android: Browsermenü → App installieren.</small></section><section class="panel notification-settings"><h2>Benachrichtigungen</h2><div class="setting-row"><span><strong>Hinweise auf neue Matches</strong><small>Kurzer Hinweis in der App. Die Anzahl bleibt immer sichtbar.</small></span>${button('<span></span>','toggle-match-alerts',`toggle-switch ${state.matchAlerts?'enabled':''}`,`role="switch" aria-checked="${state.matchAlerts}" aria-label="Hinweise auf neue Matches"`)}</div></section><section class="panel"><h2>Deine Daten</h2><p>Dieser Prototyp speichert dein Profil, Themen und Demo-Chats nur in diesem Browser. Es gibt keine Registrierung und keinen Versand an andere Personen.</p><p>Nach dem ersten Laden funktioniert die App auch offline. Zwischen verschiedenen Geräten wird noch nichts synchronisiert.</p>${button('Blockierte Personen verwalten','blocked','btn text')}${button('Demo und Datenschutz','about','btn text')}${button('Lokale Daten zurücksetzen','reset','btn text danger')}</section></div></div>`;
+  return `<div class="page-heading"><div><span class="eyebrow">SO VIEL DU MÖCHTEST. SO WENIG DU MUSST.</span><h1>Dein Profil</h1><p>Deine Themen sagen schon viel. Alles Weitere ist freiwillig.</p></div></div><div class="profile-grid"><section class="panel"><form id="profile-form"><div class="profile-intro">${avatar(state.profile,'large')}<div><h2>Dein Auftritt</h2><p>Ein Pseudonym genügt.</p></div></div><label for="profile-name">Pseudonym</label><input id="profile-name" name="name" maxlength="28" required value="${esc(state.profile.name)}" autocomplete="nickname"><fieldset><legend>Dein Avatar</legend><div class="avatar-options">${avatars.map(a=>button(avatar({...state.profile,avatar:a}),'avatar',`avatar-option ${state.profile.avatar===a?'selected':''}`,`data-id="${a}" aria-label="Avatar ${a}" aria-pressed="${state.profile.avatar===a}"`)).join('')}</div></fieldset><fieldset><legend>Deine Farbe</legend><div class="color-options">${['sage','peach','lavender','blue','sand'].map(c=>button(state.profile.color===c?icon('check'):'','color',`color-option ${c}`,`data-id="${c}" aria-label="Farbe ${c}" aria-pressed="${state.profile.color===c}"`)).join('')}</div></fieldset><label for="profile-bio">Ein paar Worte über dich <span class="optional">optional</span></label><textarea id="profile-bio" name="bio" rows="3" maxlength="300" placeholder="Was möchtest du anderen mitgeben?">${esc(state.profile.bio)}</textarea><p class="field-hint">Dein Pseudonym, Avatar, aktive Themen und dieser Text sind für passende Kontakte sichtbar.</p><button class="btn primary" type="submit">Änderungen speichern</button></form></section><div class="profile-aside"><section class="panel"><h2>Auf deinem Handy</h2><p>Öffne Themenfunke wie eine App direkt vom Startbildschirm.</p>${button(`${icon('download')} App hinzufügen`,'install','btn secondary full')}<small>Auf iPhone: Safari → Teilen → Zum Home-Bildschirm. Auf Android: Browsermenü → App installieren.</small></section><section class="panel notification-settings"><h2>Benachrichtigungen</h2><div class="setting-row"><span><strong>Hinweise auf neue Matches</strong><small>Kurzer Hinweis in der App. Die Anzahl bleibt immer sichtbar.</small></span>${button('<span></span>','toggle-match-alerts',`toggle-switch ${state.matchAlerts?'enabled':''}`,`role="switch" aria-checked="${state.matchAlerts}" aria-label="Hinweise auf neue Matches"`)}</div></section><section class="panel"><h2>Deine Daten</h2><p>${onlineMode?'Dein Profil, aktive Themen, Anfragen und Chats werden in deinem Supabase-Konto gespeichert und auf deinen angemeldeten Geräten synchronisiert.':'Dieser Demo-Modus speichert dein Profil, Themen und Beispiel-Chats nur in diesem Browser.'}</p><p>${onlineMode?'Für neue Kontakte und Nachrichten brauchst du eine Internetverbindung. Deine E-Mail-Adresse ist nur für die Anmeldung bestimmt.':'Die Demo ist nach dem ersten Laden offline nutzbar.'}</p>${onlineMode?button('Mein Konto','account','btn secondary full'):''}${button('Blockierte Personen verwalten','blocked','btn text')}${button('Demo und Datenschutz','about','btn text')}${!onlineMode?button('Lokale Daten zurücksetzen','reset','btn text danger'):''}</section></div></div>`;
 }
 
 function openModal(next) { modal=next; renderModal(); }
 function closeModal() { modal=null; renderModal(); }
 function renderModal() {
   if(!modal) { modalRoot.innerHTML=''; return; }
-  const content=modal.type==='welcome'?welcomeModal():modal.type==='catalog'?catalogModal():modal.type==='editor'?editorModal():modal.type==='person'?personModal():modal.type==='menu'?menuModal():modal.type==='report'?reportModal():modal.type==='blocked'?blockedModal():modal.type==='confirm'?confirmModal():modal.type==='install'?installModal():modal.type==='notifications'?notificationsModal():modal.type==='demo'?demoModal():aboutModal();
+  const content=modal.type==='welcome'?welcomeModal():modal.type==='catalog'?catalogModal():modal.type==='editor'?editorModal():modal.type==='person'?personModal():modal.type==='menu'?menuModal():modal.type==='report'?reportModal():modal.type==='blocked'?blockedModal():modal.type==='confirm'?confirmModal():modal.type==='install'?installModal():modal.type==='notifications'?notificationsModal():modal.type==='demo'?demoModal():modal.type==='account'?accountModal():modal.type==='auth'?authModal():modal.type==='password'?passwordModal():aboutModal();
   modalRoot.innerHTML=`<dialog class="modal ${modal.type==='catalog'?'catalog-modal':''}" aria-labelledby="modal-title"><div class="modal-heading">${modal.type==='catalog'&&modal.parent?button(icon('back'),'catalog-back','icon-btn','aria-label="Übergeordnetes Thema"'):'<span></span>'}${button(icon('close'),'close-modal','icon-btn','aria-label="Schließen"')}</div>${content}</dialog>`;
   const dialog=modalRoot.querySelector('dialog'); dialog.showModal();
   dialog.addEventListener('cancel',()=>{modal=null;});
   dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom) closeModal();}});
 }
 function welcomeModal() {
-  return `<div class="welcome-content"><span class="welcome-symbol">${icon('spark')}</span><span class="eyebrow">WILLKOMMEN BEI THEMENFUNKE</span><h2 id="modal-title">Gute Gespräche<br>fangen mit Neugier an.</h2><p>Entdecke Menschen über gemeinsame Themen. Ohne Foto-Pflicht, ohne Profilfragebogen. Mit so viel Persönlichkeit, wie du teilen möchtest.</p><div class="welcome-points"><span>${icon('tree')} Themen statt Profilshow</span><span>${icon('clock')} Heute oder immer wieder</span><span>${icon('shield')} Du entscheidest über Kontakt</span></div>${button(`Mein erstes Thema wählen ${icon('arrow')}`,'start','btn primary full')}${button('Mit Meerestieren ausprobieren','quickstart','btn secondary full')}<small>Testversion mit Beispielpersonen. Deine Eingaben bleiben auf diesem Gerät.</small></div>`;
+  return `<div class="welcome-content"><span class="welcome-symbol">${icon('spark')}</span><span class="eyebrow">WILLKOMMEN BEI THEMENFUNKE</span><h2 id="modal-title">Gute Gespräche<br>fangen mit Neugier an.</h2><p>Entdecke Menschen über gemeinsame Themen. Ohne Foto-Pflicht, ohne Profilfragebogen. Mit so viel Persönlichkeit, wie du teilen möchtest.</p><div class="welcome-points"><span>${icon('tree')} Themen statt Profilshow</span><span>${icon('clock')} Heute oder immer wieder</span><span>${icon('shield')} Du entscheidest über Kontakt</span></div>${backend.configured?button('Mit Konto anmelden','account','btn primary full'):''}${button(`Mein erstes Thema wählen ${icon('arrow')}`,'start','btn primary full')}${button('Mit Meerestieren ausprobieren','quickstart','btn secondary full')}<small>Testversion mit Beispielpersonen. Deine Eingaben bleiben auf diesem Gerät.</small></div>`;
 }
 function catalogModal() {
   const parent=topics.get(modal.parent);
@@ -208,7 +210,7 @@ function personModal() {
   const match=topicMatches().find(m=>m.person.id===modal.personId);
   if(!match) return `<h2 id="modal-title">Dieser Vorschlag hat sich geändert.</h2><p>Die Themenverbindung ist nicht mehr aktiv oder es besteht bereits ein Kontakt.</p>${button('Zurück zu Entdecken','close-modal','btn primary')}`;
   const {person,pairs}=match,pair=pairs[0];
-  return `<span class="eyebrow">${pair.kind==='exact'?'GEMEINSAMER GESPRÄCHSSTOFF':'VERWANDTES INTERESSE'}</span><h2 id="modal-title">${esc(label(pair.mine.topicId))}</h2><div class="person-heading detail-person">${avatar(person)}<div><h3>${esc(person.name)}</h3><span>Beispielperson</span></div></div>${pair.kind==='related'?`<div class="notice">Du hast „${esc(label(pair.mine.topicId))}“ gewählt, ${esc(person.name)} „${esc(label(pair.theirs.topicId))}“. Die Themen liegen im selben Zweig.</div>`:''}<div class="compare-card"><strong>${esc(person.name)} möchte ${esc(roles[pair.theirs.role].toLocaleLowerCase('de'))}.</strong><p>„${esc(pair.theirs.text)}“</p><small>${esc(status(pair.theirs))}</small></div><div class="compare-card mine"><strong>Dein Gesprächswunsch</strong><span class="role-label">${esc(roles[pair.mine.role])}</span><p>${pair.mine.text?`„${esc(pair.mine.text)}“`:'Du hast keinen Freitext ergänzt.'}</p><small>${esc(status(pair.mine))}</small></div><p class="detail-bio">${esc(person.bio)}</p><p class="field-hint">Mit der Anfrage werden dein Pseudonym, Avatar und der oben gezeigte Gesprächswunsch geteilt. Schreiben könnt ihr nach Annahme. In dieser Demo bleibt alles auf deinem Gerät.</p>${button(`Kontakt anfragen ${icon('arrow')}`,'send-request','btn primary full',`data-id="${person.id}"`)}<div class="detail-secondary">${button('Weiter','skip','btn text',`data-id="${person.id}"`)}${button('Blockieren oder melden','person-menu','btn text',`data-id="${person.id}"`)}</div>`;
+  return `<span class="eyebrow">${pair.kind==='exact'?'GEMEINSAMER GESPRÄCHSSTOFF':'VERWANDTES INTERESSE'}</span><h2 id="modal-title">${esc(label(pair.mine.topicId))}</h2><div class="person-heading detail-person">${avatar(person)}<div><h3>${esc(person.name)}</h3><span>${onlineMode?'Gemeinsame Gesprächsthemen':'Beispielperson'}</span></div></div>${pair.kind==='related'?`<div class="notice">Du hast „${esc(label(pair.mine.topicId))}“ gewählt, ${esc(person.name)} „${esc(label(pair.theirs.topicId))}“. Die Themen liegen im selben Zweig.</div>`:''}<div class="compare-card"><strong>${esc(person.name)} möchte ${esc(roles[pair.theirs.role].toLocaleLowerCase('de'))}.</strong><p>„${esc(pair.theirs.text)}“</p><small>${esc(status(pair.theirs))}</small></div><div class="compare-card mine"><strong>Dein Gesprächswunsch</strong><span class="role-label">${esc(roles[pair.mine.role])}</span><p>${pair.mine.text?`„${esc(pair.mine.text)}“`:'Du hast keinen Freitext ergänzt.'}</p><small>${esc(status(pair.mine))}</small></div><p class="detail-bio">${esc(person.bio)}</p><p class="field-hint">Mit der Anfrage werden dein Pseudonym, Avatar und der oben gezeigte Gesprächswunsch geteilt. Schreiben könnt ihr nach Annahme. ${onlineMode?'Deine E-Mail-Adresse wird dabei nicht geteilt.':'In dieser Demo bleibt alles auf deinem Gerät.'}</p>${button(`Kontakt anfragen ${icon('arrow')}`,'send-request','btn primary full',`data-id="${person.id}"`)}<div class="detail-secondary">${button('Weiter','skip','btn text',`data-id="${person.id}"`)}${button('Blockieren oder melden','person-menu','btn text',`data-id="${person.id}"`)}</div>`;
 }
 function menuModal() {
   const person=personById(modal.personId),chat=state.chats.find(c=>c.personId===person.id);
@@ -217,13 +219,14 @@ function menuModal() {
 function reportModal() {
   const p=personById(modal.personId);
   const chat=state.chats.find(c=>c.personId===p.id),request=state.requests.find(r=>r.personId===p.id);
-  const context=chat?chat.messages.map(m=>`${m.from==='me'?'Du':p.name}: ${m.text}`).join('\n'):(request?.pair.theirs.text||p.interests.map(i=>i.text).join('\n'));
-  return `<h2 id="modal-title">Inhalt melden</h2><div class="notice">Demo: Es gibt noch keinen echten Meldeeingang. Diese Meldung wird nur lokal gespeichert.</div><form id="report-form" data-id="${p.id}"><label for="report-reason">Grund</label><select id="report-reason" name="reason"><option>Belästigung</option><option>Spam</option><option>Unangemessene Inhalte</option><option>Anderer Grund</option></select><label for="report-text">Erläuterung <span class="optional">optional</span></label><textarea id="report-text" name="text" rows="3" maxlength="1000"></textarea><details><summary>Vorschau der erfassten Inhalte</summary><p>Pseudonym: ${esc(p.name)}</p><pre class="report-preview">${esc(context||'Noch keine Nachrichten.')}</pre></details><label class="checkbox-label"><input name="block" type="checkbox" checked> Zusätzlich blockieren</label><button type="submit" class="btn primary full">Demo-Meldung lokal speichern</button></form>`;
+  const context=chat?chat.messages.slice(onlineMode?-50:0).map(m=>`${m.from==='me'?'Du':p.name}: ${m.text}`).join('\n'):(request?.pair.theirs.text||p.interests.map(i=>i.text).join('\n'));
+  return `<h2 id="modal-title">Inhalt melden</h2><div class="notice">${onlineMode?'Die Meldung übermittelt das aktuelle öffentliche Profil und bis zu 50 letzte Nachrichten an den Betreiber.':'Demo: Es gibt noch keinen echten Meldeeingang. Diese Meldung wird nur lokal gespeichert.'}</div><form id="report-form" data-id="${p.id}"><label for="report-reason">Grund</label><select id="report-reason" name="reason"><option>Belästigung</option><option>Spam</option><option>Unangemessene Inhalte</option><option>Anderer Grund</option></select><label for="report-text">Erläuterung <span class="optional">optional</span></label><textarea id="report-text" name="text" rows="3" maxlength="1000"></textarea><details><summary>Vorschau der erfassten Inhalte</summary><p>Pseudonym: ${esc(p.name)}</p><pre class="report-preview">${esc(context||'Noch keine Nachrichten.')}</pre></details><label class="checkbox-label"><input name="block" type="checkbox" checked> Zusätzlich blockieren</label><button type="submit" class="btn primary full">${onlineMode?'Meldung senden':'Demo-Meldung lokal speichern'}</button></form>`;
 }
 function blockedModal() {
   return `<h2 id="modal-title">Blockierte Personen</h2>${state.blocked.length?state.blocked.map(id=>{const p=personById(id);return `<div class="blocked-row">${avatar(p,'small')}<strong>${esc(p.name)}</strong>${button('Freigeben','block','btn secondary',`data-id="${id}"`)}</div>`;}).join(''):'<p>Du hast niemanden blockiert.</p>'}`;
 }
 function confirmModal() {
+  if(modal.kind==='delete-account')return `<h2 id="modal-title">Konto endgültig löschen?</h2><p>Dein Konto, deine Themen und zugehörige Chats werden gelöscht. Diese Chats sind danach auch für deine Gesprächspartner nicht mehr verfügbar. Bereits übermittelte Meldungen können zur Prüfung erhalten bleiben.</p>${button('Konto endgültig löschen','confirm-delete-account','btn primary full')}`;
   if(modal.kind==='remove') return `<h2 id="modal-title">Thema entfernen?</h2><p>„${esc(label(modal.topicId))}“ wird aus deinen Gesprächswünschen entfernt. Bestehende Chats bleiben erhalten.</p>${button('Entfernen','confirm-remove','btn primary full',`data-id="${modal.topicId}"`)}`;
   if(modal.kind==='end') return `<h2 id="modal-title">Gespräch beenden?</h2><p>Ihr könnt danach keine weiteren Nachrichten schreiben. Der Verlauf bleibt lesbar und die Person wird dir nicht erneut vorgeschlagen.</p>${button('Gespräch beenden','confirm-end','btn primary full',`data-id="${modal.chatId}"`)}`;
   return `<h2 id="modal-title">Lokale Daten zurücksetzen?</h2><p>Dein Profil, deine Themen, Anfragen und Demo-Chats in diesem Browser werden gelöscht. Das lässt sich nicht rückgängig machen.</p>${button('Zurücksetzen','confirm-reset','btn primary full')}`;
@@ -231,7 +234,7 @@ function confirmModal() {
 function notificationsModal() {
   const matches=unseenMatches(state,findMatches(state,allPeople()));
   const incoming=state.requests.filter(r=>r.direction==='in');
-  return `<span class="eyebrow">ALLES AUF EINEN BLICK</span><h2 id="modal-title">Benachrichtigungen</h2><p>Neue Themen-Matches und Anfragen findest du hier.</p>${incoming.length?`<section class="notification-group"><h3>Warten auf dich <span>${incoming.length}</span></h3>${incoming.map(r=>{const p=personById(r.personId);return button(`${avatar(p,'small')}<span><strong>${esc(p.name)}</strong><small>Kontaktanfrage · ${esc(label(r.pair.mine.topicId))}</small></span>${icon('chevron')}`,'show-requests','notification-row');}).join('')}</section>`:''}${matches.length?`<section class="notification-group"><div class="section-heading"><h3>Neue Matches <span>${matches.length}</span></h3></div>${matches.map(m=>button(`${avatar(m.person,'small')}<span><strong>${esc(m.person.name)}</strong><small>${m.pairs[0].kind==='exact'?'Gemeinsam:':'Verwandtes Interesse:'} ${esc(label(m.pairs[0].mine.topicId))}</small></span>${icon('chevron')}`,'notification-person','notification-row',`data-id="${m.person.id}"`)).join('')}${button('Alle als gesehen markieren','mark-matches-seen','btn text full')}</section>`:''}${!matches.length&&!incoming.length?emptyState('Alles auf dem neuesten Stand.','Neue Matches und eingehende Kontaktanfragen werden hier angezeigt.','','bell'):''}<div class="notification-test-panel"><strong>Selbst ausprobieren</strong><p>Erzeuge jederzeit einen neuen Testkontakt und den passenden Hinweis.</p>${demoButtons()}</div><p class="field-hint notification-footnote">Hinweise erscheinen innerhalb der App. Personen und Kontaktanfragen sind im Prototyp Beispiele.</p>`;
+  return `<span class="eyebrow">ALLES AUF EINEN BLICK</span><h2 id="modal-title">Benachrichtigungen</h2><p>Neue Themen-Matches und Anfragen findest du hier.</p>${incoming.length?`<section class="notification-group"><h3>Warten auf dich <span>${incoming.length}</span></h3>${incoming.map(r=>{const p=personById(r.personId);return button(`${avatar(p,'small')}<span><strong>${esc(p.name)}</strong><small>Kontaktanfrage · ${esc(label(r.pair.mine.topicId))}</small></span>${icon('chevron')}`,'show-requests','notification-row');}).join('')}</section>`:''}${matches.length?`<section class="notification-group"><div class="section-heading"><h3>Neue Matches <span>${matches.length}</span></h3></div>${matches.map(m=>button(`${avatar(m.person,'small')}<span><strong>${esc(m.person.name)}</strong><small>${m.pairs[0].kind==='exact'?'Gemeinsam:':'Verwandtes Interesse:'} ${esc(label(m.pairs[0].mine.topicId))}</small></span>${icon('chevron')}`,'notification-person','notification-row',`data-id="${m.person.id}"`)).join('')}${button('Alle als gesehen markieren','mark-matches-seen','btn text full')}</section>`:''}${!matches.length&&!incoming.length?emptyState('Alles auf dem neuesten Stand.','Neue Matches und eingehende Kontaktanfragen werden hier angezeigt.','','bell'):''}<div class="notification-test-panel"><strong>${onlineMode?'Dein Konto':'Selbst ausprobieren'}</strong><p>${onlineMode?'Echte Kontakte und Nachrichten werden automatisch aktualisiert.':'Erzeuge jederzeit einen neuen Testkontakt und den passenden Hinweis.'}</p>${!onlineMode?demoButtons():button('Mein Konto','account','btn secondary')}</div><p class="field-hint notification-footnote">Hinweise erscheinen innerhalb der App.</p>`;
 }
 function demoButtons() {
   return `<div class="demo-test-actions">${button(`${icon('people')} Neues Match testen`,'demo-match','btn primary')}${button(`${icon('bell')} Kontaktanfrage testen`,'demo-incoming','btn secondary')}</div>`;
@@ -240,6 +243,7 @@ function demoModal() {
   return `<span class="eyebrow">JEDERZEIT AUSPROBIEREN</span><h2 id="modal-title">Matches & Hinweise testen</h2><p>Jeder Klick erzeugt einen neuen Beispielkontakt. So kannst du Neu-Markierungen, Zähler und Benachrichtigungen beliebig oft ausprobieren.</p>${demoButtons()}<div class="demo-test-steps"><p><strong>Neues Match:</strong> Der Hinweis erscheint oben. Mit „Neue Matches ansehen“ öffnest du den Kontakt.</p><p><strong>Kontaktanfrage:</strong> Du erhältst eine Anfrage, die du annehmen und anschließend im Demo-Chat testen kannst.</p></div><p class="field-hint">Deine bestehenden Themen und Chats bleiben erhalten. Falls kein Thema aktiv ist, wird ein zusätzliches Beispielthema für 24 Stunden aktiviert. Manuell gestartete Tests zeigen den Hinweis auch bei ausgeschalteten automatischen Match-Hinweisen.</p>${button('Infos und Datenschutz','about','btn text full')}`;
 }
 function aboutModal() {
+  if(onlineMode)return `<h2 id="modal-title">Deine Daten bei Themenfunke</h2><p>Dein Konto wird über Supabase angemeldet. Andere Personen sehen dein Pseudonym, deinen Avatar und deine freiwilligen Angaben. Deine E-Mail-Adresse wird nicht im Profil oder Chat geteilt.</p><p>Themen, Anfragen und Chats werden serverseitig gespeichert. Über die App können nur die Beteiligten auf ihr Gespräch zugreifen. Der Betreiber kann übermittelte Meldungen prüfen; die Nachrichten sind nicht Ende-zu-Ende verschlüsselt.</p><p>Neue Nachrichten werden bei geöffneter App regelmäßig abgerufen. System-Push ist noch nicht enthalten. Im Chat werden zunächst die letzten 100 Nachrichten angezeigt.</p>${button('Mein Konto','account','btn primary full')}`;
   return `<span class="eyebrow">EIN ERSTER FUNKE</span><h2 id="modal-title">Dein Prototyp zum Ausprobieren.</h2><p>Themenfunke bringt Menschen über gemeinsame Gesprächsthemen zusammen. In dieser Version kannst du den gesamten Ablauf mit Beispielpersonen testen.</p><ul class="about-list"><li>Alle Personen und Antworten sind fiktiv.</li><li>Anfragen, Chats und Meldungen bleiben in deinem Browser.</li><li>Es gibt keine echten Push-Nachrichten, Konten oder Kontakte.</li><li>Nach dem ersten Laden kannst du die App offline öffnen.</li><li>Deine Eingaben werden nicht zwischen Geräten synchronisiert.</li></ul><p>Gehostet wird die App über GitHub Pages. Beim Laden gelten zusätzlich die Datenschutzbedingungen des Hosting-Anbieters.</p>${button('Verstanden','close-modal','btn primary full')}`;
 }
 function installModal() {
@@ -248,6 +252,7 @@ function installModal() {
 
 async function action(element) {
   const a=element.dataset.action,id=element.dataset.id;
+  if(await onlineAction(a,id,element))return;
   switch(a) {
     case 'nav': closeModal(); go(element.dataset.tab); break;
     case 'about': openModal({type:'about'}); break;
@@ -306,12 +311,13 @@ document.addEventListener('click',event=>{
   const element=event.target.closest('[data-action]');
   if(element) action(element).catch(error=>toast(error.message||'Das hat gerade nicht funktioniert.'));
 });
-document.addEventListener('submit',event=>{
+document.addEventListener('submit',async event=>{
   const form=event.target;
   if(!['interest-form','profile-form','chat-form','report-form'].includes(form.id)) return;
   event.preventDefault();
   const data=new FormData(form);
   try {
+    if(onlineMode){await onlineForm(form,data);return;}
     if(form.id==='interest-form') {
       const item=upsertInterest(state,form.dataset.id,{role:data.get('role')||'open',mode:data.get('mode'),text:data.get('text').trim()});
       if(form.elements.keepAlways&&!data.has('keepAlways')&&data.get('mode')!=='always')item.always=false;
@@ -343,9 +349,160 @@ document.addEventListener('pointercancel',()=>{swipeStart=null;});
 function scrollChat(){requestAnimationFrame(()=>{const box=document.querySelector('.chat-messages');if(box)box.scrollTop=box.scrollHeight;});}
 window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if(navItems.some(([id])=>id===next)){tab=next;currentChat=null;render();}});
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;});
-window.addEventListener('offline',()=>toast('Du bist offline. Der Demo-Prototyp funktioniert auf deinem Gerät weiter.'));
+window.addEventListener('offline',()=>toast(onlineMode?'Du bist offline. Der Versand ist erst nach erfolgreicher Serverbestätigung abgeschlossen.':'Du bist offline. Der Demo-Prototyp funktioniert auf deinem Gerät weiter.'));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!modal){render();}});
 setInterval(()=>{if(!modal&&!currentChat&&!document.querySelector('#profile-form'))render();},60000);
 if('serviceWorker'in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 if(!state.started)modal={type:'welcome'};
 render();
+
+bootOnline().catch(error=>toast(error.message));
+
+function authModal(){
+  const kind=modal.kind||'login',signup=kind==='signup',reset=kind==='reset';
+  if(!backend.configured)return `<h2 id="modal-title">Konten werden vorbereitet</h2><p>Die Serververbindung wird gerade eingerichtet. Die Demo kannst du weiterhin nutzen.</p>${button('Demo ausprobieren','close-modal','btn primary full')}`;
+  return `<span class="eyebrow">DEIN PROFIL BLEIBT PSEUDONYM</span><h2 id="modal-title">${signup?'Konto erstellen':reset?'Passwort zurücksetzen':'Bei Themenfunke anmelden'}</h2><p>${signup?'Deine E-Mail-Adresse dient nur der Anmeldung und wird anderen nicht angezeigt.':reset?'Du erhältst einen Link, mit dem du ein neues Passwort wählen kannst.':'Verwende dein Themenfunke-Konto. Deine Anmeldung beim Supabase-Dashboard ist davon unabhängig.'}</p><form id="auth-form" data-kind="${kind}"><label for="auth-email">E-Mail-Adresse</label><input id="auth-email" type="email" name="email" autocomplete="email" required maxlength="254" spellcheck="false">${!reset?`<label for="auth-password">Passwort</label><input id="auth-password" type="password" name="password" autocomplete="${signup?'new-password':'current-password'}" ${signup?'minlength="12"':''} required maxlength="128">`:''}<p id="auth-error" class="form-error" role="alert"></p><button class="btn primary full" type="submit">${signup?'Konto erstellen':reset?'Link anfordern':'Anmelden'}</button></form>${backend.settings.signupEnabled?button(signup?'Ich habe schon ein Konto':'Neues Konto erstellen',signup?'login':'signup','btn text full'):!reset?'<p class="field-hint">Die erste Testrunde läuft mit eingeladenen Konten. Deine Zugangsdaten erhältst du vom Betreiber.</p>':''}${!signup&&backend.settings.passwordResetEnabled?button(reset?'Zurück zur Anmeldung':'Passwort vergessen?',reset?'login':'password-reset','btn text full'):''}`;
+}
+function accountModal(){
+  return `<h2 id="modal-title">Dein Themenfunke-Konto</h2><p><strong>${esc(state.profile.name)}</strong><br>${esc(onlineSession?.user?.email||'')}</p><p class="field-hint">Deine E-Mail-Adresse ist nur für dich sichtbar. Andere sehen dein Pseudonym, deinen Avatar und deine freiwilligen Themenangaben.</p><div class="menu-actions">${button('Abmelden','logout','btn secondary')}${button('In den Demo-Modus wechseln','leave-online','btn secondary')}${button('Konto löschen','delete-account','btn text danger')}</div>`;
+}
+function passwordModal(){
+  return `<h2 id="modal-title">Neues Passwort wählen</h2><form id="password-form"><label for="new-password">Neues Passwort, mindestens 12 Zeichen</label><input id="new-password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><p id="auth-error" class="form-error" role="alert"></p><button class="btn primary full" type="submit">Passwort speichern</button></form>`;
+}
+function onlinePreference(){try{return JSON.parse(localStorage.getItem('themenfunke-online-'+onlineSession.user.id))||{};}catch{return {};}}
+function preferMode(mode){try{localStorage.setItem('themenfunke-mode',mode);}catch{}}
+function exitOnline(){
+  remoteGeneration++;onlineMode=false;onlinePeople=[];onlineSession=null;remoteSignature='';remoteError='';remotePrefs={};matchNotice=null;currentChat=null;modal=null;
+  try{state=loadState(localStorage);}catch{state=initialState();}
+  preferMode('demo');go('discover');
+}
+async function enterOnline(session){
+  onlineSession=session;onlineMode=true;remoteGeneration++;remoteSignature='';remotePrefs=onlinePreference();onlinePeople=[];state={...initialState(),started:true};modal=null;matchNotice=null;currentChat=null;preferMode('online');
+  try{await refreshOnline(true);go('discover');}
+  catch(error){remoteError=error.message;render();toast(error.message);}
+}
+let refreshTask=null;
+async function refreshOnline(force=false){
+  while(refreshTask){if(!force)return;try{await refreshTask;}catch{}}
+  const task=refreshSnapshot(force);refreshTask=task;try{return await task;}finally{if(refreshTask===task)refreshTask=null;}
+}
+async function refreshSnapshot(force=false){
+  if(!onlineMode||remoteSyncing||(!force&&(modal||tab==='profile')))return;
+  remoteSyncing=true;const generation=remoteGeneration;
+  try{
+    const data=await backend.snapshot();
+    if(generation!==remoteGeneration||!onlineMode)return;
+    remoteError='';
+    const signature=JSON.stringify({...data,serverNow:0});
+    if(signature===remoteSignature&&!force)return;
+    if(!force&&(modal||tab==='profile'))return;
+    remoteSignature=signature;
+    const drafts=new Map(state.chats.map(c=>[c.id,{draft:c.draft||'',pendingPayload:c.pendingPayload}]));
+    const focusedInput=document.activeElement?.id,selection=document.activeElement?.selectionStart;
+    const oldBox=document.querySelector('.chat-messages'),wasBottom=oldBox?oldBox.scrollHeight-oldBox.scrollTop-oldBox.clientHeight<80:true,oldTop=oldBox?.scrollTop||0;
+    const seenRequests=new Set(remotePrefs.notifiedRequests||[]);
+    const incoming=data.requests.filter(r=>r.direction==='in'&&!seenRequests.has(r.id));
+    remotePrefs.notifiedRequests=[...seenRequests,...incoming.map(r=>r.id)];
+    onlinePeople=data.people.filter(Boolean);
+    state={...initialState(),...data,started:true,notifiedMatches:remotePrefs.notifiedMatches||[],demoPeople:[],ended:data.chats.filter(c=>c.ended).map(c=>c.personId)};
+    for(const chat of state.chats)Object.assign(chat,drafts.get(chat.id)||{});
+    save();render();
+    if(incoming.length){showMatchNotice({kind:'request',id:incoming[0].id});renderMatchNotice();}
+    const input=focusedInput?document.getElementById(focusedInput):null;
+    if(input){input.focus({preventScroll:true});try{if(selection!==null)input.setSelectionRange(selection,selection);}catch{}}
+    const newBox=document.querySelector('.chat-messages');if(newBox)newBox.scrollTop=wasBottom?newBox.scrollHeight:oldTop;
+  }catch(error){remoteError=error.message;const status=document.querySelector('.online-status>span:nth-child(2)');if(status)status.textContent=error.message;if(force)throw error;}
+  finally{remoteSyncing=false;}
+}
+async function runOnline(action,payload){
+  if(remoteBusy)throw new Error('Eine Änderung wird bereits gespeichert.');
+  remoteBusy=true;
+  try{const result=await backend.command(action,payload);await refreshOnline(true);return result;}
+  finally{remoteBusy=false;}
+}
+async function onlineAction(action,id,element){
+  if(action==='account'){openModal({type:onlineMode?'account':'auth'});return true;}
+  if(['login','signup','password-reset'].includes(action)){openModal({type:'auth',kind:action==='password-reset'?'reset':action});return true;}
+  if(action==='online-refresh'){await refreshOnline(true);return true;}
+  if(action==='leave-online'){exitOnline();return true;}
+  if(action==='logout'){await backend.signOut();exitOnline();toast('Du bist abgemeldet.');return true;}
+  if(!onlineMode)return false;
+  if(['demo','demo-match','demo-incoming','demo-reply','reset','confirm-reset'].includes(action)){toast('Wechsle über „Mein Konto“ in den Demo-Modus, um Beispielkontakte zu testen.');return true;}
+  if(action==='delete-account'){openModal({type:'confirm',kind:'delete-account'});return true;}
+  if(action==='confirm-delete-account'){
+    const userId=onlineSession.user.id;await backend.command('delete_account');try{localStorage.removeItem('themenfunke-online-'+userId);}catch{}try{await backend.signOut();}finally{exitOnline();}toast('Dein Konto wurde gelöscht.');return true;
+  }
+  if(action==='person'||action==='notification-person'){
+    await runOnline('seen',{personId:id});if(action==='notification-person'){topicFilter='all';matchFilter='all';}modal={type:'person',personId:id};render();return true;
+  }
+  if(action==='mark-matches-seen'){
+    for(const match of findMatches(state,allPeople()))await backend.command('seen',{personId:match.person.id});await refreshOnline(true);return true;
+  }
+  if(action==='toggle-match-alerts'){await runOnline('alerts',{enabled:!state.matchAlerts});return true;}
+  if(action==='quickstart'){await runOnline('topic',{topicId:'meerestiere',mode:'day',role:'learn',text:'Mich interessieren vor allem Kraken.'});closeModal();go('discover');return true;}
+  if(action==='start'){closeModal();openModal({type:'catalog',view:'tree'});return true;}
+  if(action==='skip'){await runOnline('hide',{personId:id});closeModal();render();return true;}
+  if(action==='unhide'){await runOnline('unhide',{});return true;}
+  if(action==='send-request'){
+    const match=topicMatches().find(m=>m.person.id===id);if(!match)throw new Error('Dieser Kontakt ist nicht mehr verfügbar.');
+    await runOnline('request',{personId:id,topicId:match.pairs[0].mine.topicId});closeModal();messageTab='requests';go('messages');toast('Kontaktanfrage gesendet.');return true;
+  }
+  if(['focus','extend','pause','confirm-remove'].includes(action)){
+    const interest=state.interests.find(i=>i.topicId===id);
+    if(action==='pause'&&interest?.paused){openModal({type:'editor',topicId:id});return true;}
+    await runOnline(action==='confirm-remove'?'remove_topic':action,{topicId:id});closeModal();render();return true;
+  }
+  if(action==='accept'){const result=await runOnline('accept',{id});closeModal();currentChat=result.id;render();scrollChat();return true;}
+  if(action==='decline'){
+    const request=state.requests.find(r=>r.id===id);await runOnline(request?.direction==='out'?'withdraw':'decline',{id});return true;
+  }
+  if(action==='block'){await runOnline(state.blocked.includes(id)?'unblock':'block',{personId:id});closeModal();render();return true;}
+  if(action==='confirm-end'){await runOnline('end_chat',{id});closeModal();render();return true;}
+  return false;
+}
+async function onlineForm(form,data){
+  if(form.id==='interest-form'){
+    await runOnline('topic',{topicId:form.dataset.id,role:data.get('role')||'open',mode:data.get('mode'),text:data.get('text').trim(),keepAlways:data.has('keepAlways')});closeModal();render();toast('Gesprächswunsch gespeichert.');
+  }else if(form.id==='profile-form'){
+    await runOnline('profile',{name:data.get('name').trim(),avatar:state.profile.avatar,color:state.profile.color,bio:data.get('bio').trim()});toast('Profil gespeichert.');
+  }else if(form.id==='chat-form'){
+    const text=data.get('message').trim();if(!text)return;
+    const chat=state.chats.find(c=>c.id===form.dataset.id);
+    if(!chat)throw new Error('Dieses Gespräch ist nicht mehr verfügbar.');
+    if(chat.pendingPayload?.text!==text)chat.pendingPayload={text,clientId:crypto.randomUUID()};
+    await runOnline('message',{id:chat.id,...chat.pendingPayload});
+    const current=state.chats.find(c=>c.id===chat.id);if(current&&current.draft.trim()===text){current.draft='';current.pendingPayload=null;}render();scrollChat();document.querySelector('#message-input')?.focus();
+  }else if(form.id==='report-form'){
+    const personId=form.dataset.id,match=topicMatches().find(m=>m.person.id===personId);
+    await runOnline('report',{personId,topicId:match?.pairs[0].mine.topicId,reason:data.get('reason'),text:data.get('text'),block:data.has('block')});closeModal();render();toast('Meldung an den Betreiber übermittelt.');
+  }
+}
+document.addEventListener('submit',async event=>{
+  const form=event.target;if(!['auth-form','password-form'].includes(form.id))return;
+  event.preventDefault();const data=new FormData(form),submit=form.querySelector('[type="submit"]'),error=form.querySelector('#auth-error');submit.disabled=true;error.textContent='';
+  try{
+    if(form.id==='password-form'){await backend.updatePassword(data.get('password'));closeModal();toast('Passwort gespeichert.');}
+    else if(form.dataset.kind==='reset'){await backend.resetPassword(data.get('email').trim());toast('Wenn ein Konto besteht, erhältst du einen Link.');}
+    else if(form.dataset.kind==='signup'){
+      const result=await backend.signUp(data.get('email').trim(),data.get('password'));if(result.session)await enterOnline(result.session);else{openModal({type:'auth'});toast('Bitte bestätige deine E-Mail-Adresse, bevor du dich anmeldest.');}
+    }else{const result=await backend.signIn(data.get('email').trim(),data.get('password'));await enterOnline(result.session);}
+  }catch(problem){if(error.isConnected)error.textContent=problem.message;else toast(problem.message);}
+  finally{if(submit.isConnected)submit.disabled=false;}
+});
+async function bootOnline(){
+  if(!backend.client)return;
+  let recovering=false;
+  backend.client.auth.onAuthStateChange((event,session)=>{
+    if(event==='SIGNED_OUT'&&onlineMode)setTimeout(exitOnline,0);
+    if((event==='TOKEN_REFRESHED'||event==='SIGNED_IN')&&session){
+      if(onlineMode&&session.user.id!==onlineSession?.user.id)setTimeout(()=>enterOnline(session).catch(error=>toast(error.message)),0);
+      else if(event==='TOKEN_REFRESHED')onlineSession=session;
+    }
+    if(event==='PASSWORD_RECOVERY'&&session){recovering=true;setTimeout(async()=>{await enterOnline(session);openModal({type:'password'});},0);}
+  });
+  const {data}=await backend.client.auth.getSession();
+  let preferred;try{preferred=localStorage.getItem('themenfunke-mode');}catch{}
+  if(data.session&&preferred!=='demo'&&!recovering)await enterOnline(data.session);
+  setInterval(()=>refreshOnline().catch(()=>{}),5000);
+  window.addEventListener('online',()=>refreshOnline(true).catch(error=>toast(error.message)));
+}
